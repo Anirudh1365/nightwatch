@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Warden</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap wide">
+  <div class="topbar">
+    <div>
+      <div class="brand">Night<span>Watch</span></div>
+      <div class="muted" id="who">&nbsp;</div>
+    </div>
+    <div class="row">
+      <select id="block"></select>
+      <a class="btn secondary small" id="rounds-link" href="taker.html">Rounds</a>
+      <a class="btn secondary small" id="reception-link" href="reception.html">Reception screen</a>
+      <button class="btn secondary small" onclick="NW.logout()">Log out</button>
+    </div>
+  </div>
+
+  <div id="msg" class="msg hidden"></div>
+
+  <div class="grid2" style="margin-bottom:16px">
+    <!-- Tonight -->
+    <section class="card">
+      <h2 id="tonight-title">Tonight</h2>
+      <div class="stats" id="stats"></div>
+    </section>
+
+    <!-- Alerts -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Absent tonight, no gate pass</h2>
+        <button class="btn secondary small" id="refresh">Refresh</button>
+      </div>
+      <ul class="list" id="alerts"><li class="muted">Loading…</li></ul>
+    </section>
+  </div>
+
+  <!-- Gate passes waiting for the warden -->
+  <section class="card">
+    <h2>Gate passes waiting for you</h2>
+    <p class="muted">These are already approved by the parent through their email link.</p>
+    <ul class="list" id="passes"><li class="muted">Loading…</li></ul>
+  </section>
+
+  <!-- Nightly report -->
+  <section class="card">
+    <h2>Last 14 nights</h2>
+    <p class="muted">Students on time, late (after the window closed) and absent each night. Use this for the curfew review.</p>
+    <div class="legend">
+      <span><i style="background:var(--c-ontime)"></i>On time</span>
+      <span><i style="background:var(--c-late)"></i>Late</span>
+      <span><i style="background:var(--c-absent)"></i>Absent</span>
+    </div>
+    <div class="chart-wrap" id="chart"></div>
+    <details>
+      <summary>Show as table</summary>
+      <table class="data" id="report-table"></table>
+    </details>
+  </section>
+
+  <!-- Repeat-absence check -->
+  <section class="card">
+    <h2>Repeat absences</h2>
+    <p class="muted">Emails students with 3 or more absences, or 5 or more manual check-ins, in the last 14 nights, and asks them to meet you.</p>
+    <button class="btn" id="flags-btn" style="width:auto">Run the 14-night check</button>
+    <ul class="list" id="flags" style="margin-top:12px"></ul>
+  </section>
+</main>
+
+<script src="api.js"></script>
+<script>
+  const session = NW.requireLogin(["warden", "chief"]);
+  document.getElementById("who").textContent = session.name;
+  const msg = document.getElementById("msg");
+  let blockId = null;
+
+  // ---------- tonight ----------
+  async function loadTonight() {
+    const n = await NW.api(`/api/blocks/${blockId}/night`);
+    document.getElementById("tonight-title").textContent = `Tonight · ${NW.niceDate(n.night)}`;
+    const c = n.counts;
+    document.getElementById("stats").innerHTML = [
+      [c.present, "Present"], [c.late, "Late"], [c.absent, "Absent"],
+      [c.unmarked, "Not checked in"], [c.excused, "On gate pass"], [n.total, "Students"],
+    ].map(([num, label]) => `<div class="stat"><b>${num}</b><span>${label}</span></div>`).join("");
+  }
+
+  async function loadAlerts() {
+    const list = document.getElementById("alerts");
+    const alerts = await NW.api(`/api/blocks/${blockId}/alerts`);
+    // high severity first: they checked in on the phone but weren't in the room
+    alerts.sort((a, b) => (b.severity === "high") - (a.severity === "high"));
+    list.innerHTML = alerts.length
+      ? alerts.map(a => `<li>
+          <div><strong>${NW.esc(a.name)}</strong> · Room ${NW.esc(a.room)}</div>
+          ${a.severity === "high"
+            ? '<span class="pill bad">Checked in, room empty</span>'
+            : '<span class="pill warn">Absent</span>'}
+        </li>`).join("")
+      : '<li class="muted">No unexcused absences tonight.</li>';
+  }
+
+  // ---------- gate passes ----------
+  async function loadPasses() {
+    const list = document.getElementById("passes");
+    const passes = await NW.api(`/api/blocks/${blockId}/passes?status=pending_warden`);
+    list.innerHTML = passes.length
+      ? passes.map(p => `<li>
+          <div><strong>${NW.esc(p.student)}</strong> · Room ${NW.esc(p.room)} · ${NW.esc(NW.niceDate(p.date))}
+            <div class="muted">${NW.esc(p.reason)}</div></div>
+          <div class="actions">
+            <button class="btn small ok" data-pass="${p.id}" data-decision="approve">Approve</button>
+            <button class="btn small bad" data-pass="${p.id}" data-decision="reject">Reject</button>
+          </div>
+        </li>`).join("")
+      : '<li class="muted">Nothing waiting.</li>';
+  }
+
+  document.getElementById("passes").addEventListener("click", async e => {
+    const btn = e.target.closest("button[data-pass]");
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const res = await NW.api(`/api/passes/${btn.dataset.pass}/decide`, {
+        method: "POST", body: { decision: btn.dataset.decision },
+      });
+      NW.show(msg, "Pass " + res.status + ".", "ok");
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    loadPasses();
+  });
+
+  // ---------- nightly report chart ----------
+  const SERIES = [
+    ["ontime", "On time", "var(--c-ontime)"],
+    ["late", "Late", "var(--c-late)"],
+    ["absent", "Absent", "var(--c-absent)"],
+  ];
+
+  // Path for a bar segment whose top corners are rounded.
+  function topRounded(x, y, w, h, r) {
+    r = Math.min(r, h, w / 2);
+    return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+  }
+
+  async function loadReport() {
+    const q = session.role === "chief" ? `?days=14&block_id=${blockId}` : "?days=14";
+    const raw = await NW.api("/api/reports/nightly" + q);
+
+    // Every night in the range, including ones with no records, so gaps are visible.
+    const nights = [];
+    const today = new Date(Date.now() - 12 * 3600 * 1000);   // a night runs noon to noon
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const r = raw[key];
+      // "present" from the API includes late arrivals, so on time = present - late
+      nights.push(r
+        ? { key, ontime: r.present - r.late, late: r.late, absent: r.absent, manual: r.manual, empty: false }
+        : { key, ontime: 0, late: 0, absent: 0, manual: 0, empty: true });
+    }
+
+    // table view
+    document.getElementById("report-table").innerHTML =
+      "<tr><th>Night</th><th>On time</th><th>Late</th><th>Absent</th><th>Marked by taker</th></tr>" +
+      nights.slice().reverse().map(n => `<tr><td>${NW.niceDate(n.key)}</td>
+        <td>${n.empty ? "–" : n.ontime}</td><td>${n.empty ? "–" : n.late}</td>
+        <td>${n.empty ? "–" : n.absent}</td><td>${n.empty ? "–" : n.manual}</td></tr>`).join("");
+
+    // chart geometry
+    const W = 720, H = 240, left = 32, right = 8, top = 12, bottom = 28;
+    const plotW = W - left - right, plotH = H - top - bottom;
+    const maxTotal = Math.max(4, ...nights.map(n => n.ontime + n.late + n.absent));
+    const step = Math.ceil(maxTotal / 4);
+    const yMax = step * 4;
+    const y = v => top + plotH - (v / yMax) * plotH;
+    const slot = plotW / nights.length;
+    const barW = Math.min(28, slot * 0.6);
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Stacked bar chart of on-time, late and absent students per night">`;
+    for (let v = 0; v <= yMax; v += step) {         // light gridlines + y labels
+      svg += `<line x1="${left}" x2="${W - right}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/>`;
+      svg += `<text x="${left - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+    }
+    nights.forEach((n, i) => {
+      const x = left + slot * i + (slot - barW) / 2;
+      const parts = SERIES.map(([k, , color]) => [n[k], color]).filter(([v]) => v > 0);
+      let base = 0;
+      parts.forEach(([v, color], j) => {
+        const y0 = y(base), y1 = y(base + v);
+        const h = Math.max(1, y0 - y1 - (j > 0 ? 2 : 0));   // 2px gap between stacked segments
+        if (j === parts.length - 1) {
+          svg += `<path d="${topRounded(x, y1, barW, h, 4)}" fill="${color}"/>`;
+        } else {
+          svg += `<rect x="${x}" y="${y1}" width="${barW}" height="${h}" fill="${color}"/>`;
+        }
+        base += v;
+      });
+      const [, m, d] = n.key.split("-").map(Number);
+      if (i % 2 === (nights.length - 1) % 2)           // label every other night, always the latest
+        svg += `<text x="${x + barW / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)">${d}/${m}</text>`;
+      // invisible full-height target for the hover tooltip
+      svg += `<rect class="hit" data-i="${i}" x="${left + slot * i}" y="${top}" width="${slot}" height="${plotH}" fill="transparent"/>`;
+    });
+    svg += "</svg>";
+
+    const wrap = document.getElementById("chart");
+    wrap.innerHTML = svg + '<div class="tooltip hidden"></div>';
+    const tip = wrap.querySelector(".tooltip");
+    wrap.querySelectorAll(".hit").forEach(hit => {
+      hit.addEventListener("mouseenter", () => {
+        const n = nights[hit.dataset.i];
+        tip.innerHTML = `<strong>${NW.niceDate(n.key)}</strong><br>` + (n.empty ? "No records" :
+          SERIES.map(([k, label, color]) =>
+            `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:6px"></i>${label}: ${n[k]}`
+          ).join("<br>") + `<br><span class="muted">Marked by taker: ${n.manual}</span>`);
+        tip.classList.remove("hidden");
+        const box = hit.getBoundingClientRect(), outer = wrap.getBoundingClientRect();
+        const leftPx = box.left - outer.left + box.width / 2;
+        tip.style.left = Math.min(Math.max(0, leftPx - tip.offsetWidth / 2), outer.width - tip.offsetWidth) + "px";
+        tip.style.top = "0px";
+      });
+      hit.addEventListener("mouseleave", () => tip.classList.add("hidden"));
+    });
+  }
+
+  // ---------- repeat-absence check ----------
+  document.getElementById("flags-btn").addEventListener("click", async e => {
+    const list = document.getElementById("flags");
+    e.target.disabled = true;
+    try {
+      const flagged = await NW.api("/api/flags/run", { method: "POST" });
+      list.innerHTML = flagged.length
+        ? flagged.map(f => `<li>
+            <div><strong>${NW.esc(f.name)}</strong> · Room ${NW.esc(f.room)}</div>
+            <span class="muted">${f.absent} absent · ${f.manual} manual · email sent</span>
+          </li>`).join("")
+        : '<li class="muted">Nobody crossed the limit.</li>';
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    e.target.disabled = false;
+  });
+
+  // ---------- load everything for the chosen block ----------
+  async function loadAll() {
+    document.getElementById("rounds-link").href = "taker.html?block=" + blockId;
+    document.getElementById("reception-link").href = "reception.html?block=" + blockId;
+    document.getElementById("flags").innerHTML = "";
+    NW.show(msg, "");
+    const results = await Promise.allSettled([loadTonight(), loadAlerts(), loadPasses(), loadReport()]);
+    const failed = results.find(r => r.status === "rejected");
+    if (failed) NW.show(msg, failed.reason.message);
+  }
+
+  document.getElementById("refresh").addEventListener("click", loadAll);
+
+  NW.blockPicker(document.getElementById("block"), id => { blockId = id; loadAll(); })
+    .then(id => { blockId = id; loadAll(); })
+    .catch(err => NW.show(msg, err.message));
+</script>
+</body>
+</html>

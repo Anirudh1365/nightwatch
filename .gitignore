@@ -1,0 +1,7 @@
+# local database and generated files
+backend/nightwatch.db
+__pycache__/
+*.pyc
+# HTTPS certificate + private key for the demo (made by make_cert.py)
+backend/certs/
+.env

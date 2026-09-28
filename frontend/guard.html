@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Guard</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="brand">Night<span>Watch</span></div>
+      <div class="muted" id="who">&nbsp;</div>
+    </div>
+    <button class="btn secondary small" onclick="NW.logout()">Log out</button>
+  </div>
+
+  <section class="card">
+    <h2>Reception screen</h2>
+    <p class="muted">Open this on the reception display. It shows the check-in QR and changes it every 15 seconds.</p>
+    <a class="btn" id="reception-link" href="reception.html">Open reception screen</a>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Approved gate passes today</h2>
+      <button class="btn secondary small" id="refresh">Refresh</button>
+    </div>
+    <p class="muted" style="margin-top:8px">Only passes approved by both the parent and the warden appear here. Each pass is valid for today only.</p>
+    <ul class="list" id="passes"><li class="muted">Loading…</li></ul>
+  </section>
+</main>
+
+<script src="api.js"></script>
+<script>
+  const session = NW.requireLogin(["guard"]);
+  document.getElementById("who").textContent = session.name;
+  document.getElementById("reception-link").href = "reception.html?block=" + session.block_id;
+
+  async function loadPasses() {
+    const list = document.getElementById("passes");
+    try {
+      const passes = await NW.api(`/api/blocks/${session.block_id}/passes`);
+      list.innerHTML = passes.length
+        ? passes.map(p => `<li>
+            <div><strong>${NW.esc(p.student)}</strong> · Room ${NW.esc(p.room)}
+              <div class="muted">${NW.esc(p.reason)}</div></div>
+            <span class="pill ok">Approved</span>
+          </li>`).join("")
+        : '<li class="muted">No approved passes for today.</li>';
+    } catch (err) {
+      list.innerHTML = `<li class="muted">${NW.esc(err.message)}</li>`;
+    }
+  }
+
+  document.getElementById("refresh").addEventListener("click", loadPasses);
+  setInterval(loadPasses, 60000);
+  loadPasses();
+</script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Rounds</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .visit { padding: 12px 0; border-top: 1px solid var(--line); }
+    .visit:first-child { border-top: 0; }
+    .visit-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .room { font-size: 1.2rem; font-weight: 700; }
+    .visit .row select { flex: 1; min-width: 140px; }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="brand">Night<span>Watch</span></div>
+      <div class="muted" id="who">&nbsp;</div>
+    </div>
+    <div class="row">
+      <select id="block"></select>
+      <button class="btn secondary small" onclick="NW.logout()">Log out</button>
+    </div>
+  </div>
+
+  <section class="card">
+    <h2 id="title">Tonight</h2>
+    <div class="stats" id="stats"></div>
+    <p class="muted" style="margin:12px 0 0">
+      Visit only the rooms below: students who haven't checked in, plus a few random spot checks.
+      The list is best loaded after the check-in window closes.
+    </p>
+  </section>
+
+  <div id="msg" class="msg hidden"></div>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Rooms to visit</h2>
+      <button class="btn secondary small" id="refresh">Refresh</button>
+    </div>
+    <div id="visits"><p class="muted">Loading…</p></div>
+  </section>
+</main>
+
+<script src="api.js"></script>
+<script>
+  const session = NW.requireLogin(["taker", "warden", "chief"]);
+  document.getElementById("who").textContent = session.name;
+  const msg = document.getElementById("msg");
+  let blockId = null;
+
+  const REASONS = { asleep: "Asleep", sick: "Sick", phone_issue: "Phone issue", other: "Other" };
+
+  function visitRow(v) {
+    const head = `<div class="visit-head">
+        <div><span class="room">${NW.esc(v.room)}</span> ${NW.esc(v.name)}</div>
+        ${v.why === "spot_check" ? '<span class="pill info">Spot check</span>' : '<span class="pill warn">Not checked in</span>'}
+      </div>`;
+
+    if (v.why === "spot_check") {
+      // Student checked in on their phone; confirm they're really in the room.
+      if (v.reason === "spot_check_confirmed")
+        return `<div class="visit">${head}<span class="pill ok">Confirmed in room</span></div>`;
+      if (v.status === "absent")
+        return `<div class="visit">${head}<span class="pill bad">Room empty · warden alerted</span></div>`;
+      return `<div class="visit">${head}<div class="actions">
+          <button class="btn small ok" data-id="${v.student_id}" data-mark="present">In room</button>
+          <button class="btn small bad" data-id="${v.student_id}" data-mark="absent" data-name="${NW.esc(v.name)}">Room empty</button>
+        </div></div>`;
+    }
+
+    // Not checked in: present needs a reason, so we can tell who keeps skipping the app.
+    const options = Object.entries(REASONS).map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
+    return `<div class="visit">${head}<div class="row">
+        <select id="reason-${v.student_id}"><option value="">Present, reason…</option>${options}</select>
+        <button class="btn small ok" data-id="${v.student_id}" data-mark="present">Present</button>
+        <button class="btn small bad" data-id="${v.student_id}" data-mark="absent" data-name="${NW.esc(v.name)}">Absent</button>
+      </div></div>`;
+  }
+
+  async function load() {
+    try {
+      const n = await NW.api(`/api/blocks/${blockId}/night`);
+      document.getElementById("title").textContent = `${n.block} · night of ${NW.niceDate(n.night)}`;
+      const c = n.counts;
+      document.getElementById("stats").innerHTML = [
+        [c.present, "Present"], [c.unmarked, "Not checked in"], [c.absent, "Absent"],
+        [c.late, "Late"], [c.excused, "On gate pass"], [n.total, "Students"],
+      ].map(([num, label]) => `<div class="stat"><b>${num}</b><span>${label}</span></div>`).join("");
+
+      document.getElementById("visits").innerHTML = n.to_visit.length
+        ? n.to_visit.map(visitRow).join("")
+        : '<p class="muted" style="margin-top:12px">Nothing left to visit.</p>';
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+  }
+
+  // One click handler for every Present / Absent / In room / Room empty button.
+  document.getElementById("visits").addEventListener("click", async e => {
+    const btn = e.target.closest("button[data-mark]");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const status = btn.dataset.mark;
+    const body = { student_id: id, status };
+
+    const reasonSelect = document.getElementById("reason-" + id);
+    if (status === "present" && reasonSelect) {
+      if (!reasonSelect.value) {
+        NW.show(msg, "Pick a reason before marking present.");
+        reasonSelect.focus();
+        return;
+      }
+      body.reason = reasonSelect.value;
+    }
+    if (status === "absent" && !confirm(`Mark ${btn.dataset.name} absent? The warden is alerted tonight.`)) return;
+
+    btn.disabled = true;
+    try {
+      const res = await NW.api(`/api/blocks/${blockId}/night/mark`, { method: "POST", body });
+      NW.show(msg, res.message, "ok");
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    load();
+  });
+
+  document.getElementById("refresh").addEventListener("click", load);
+
+  NW.blockPicker(document.getElementById("block"), id => { blockId = id; load(); })
+    .then(id => { blockId = id; load(); })
+    .catch(err => NW.show(msg, err.message));
+</script>
+</body>
+</html>

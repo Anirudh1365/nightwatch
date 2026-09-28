@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Login</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap">
+  <div style="margin: 32px 0 20px">
+    <div class="brand" style="font-size:1.6rem">Night<span>Watch</span></div>
+    <p class="muted">Hostel night attendance</p>
+  </div>
+
+  <form class="card" id="login-form">
+    <div class="tabs" role="tablist">
+      <button type="button" class="active" data-kind="student">Student</button>
+      <button type="button" data-kind="staff">Staff</button>
+    </div>
+
+    <div id="error" class="msg error hidden"></div>
+
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" required placeholder="you@demo.edu">
+
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+
+    <button class="btn" id="submit">Log in as student</button>
+    <p class="muted" id="staff-note" style="margin:12px 0 0">
+      Staff: wardens, attendance takers, guards and the chief warden all log in here.
+    </p>
+  </form>
+
+  <p class="muted">Parents don't need an account. You get a one-time link by email when your child asks for a gate pass.</p>
+</main>
+
+<script src="api.js"></script>
+<script>
+  // Already logged in? Go straight to your page.
+  const existing = NW.session();
+  if (existing) location.href = NW.homeFor(existing.role);
+
+  let kind = "student";
+  const tabs = document.querySelectorAll(".tabs button");
+  const submit = document.getElementById("submit");
+  const error = document.getElementById("error");
+  const staffNote = document.getElementById("staff-note");
+  staffNote.classList.add("hidden");
+
+  tabs.forEach(btn => btn.addEventListener("click", () => {
+    kind = btn.dataset.kind;
+    tabs.forEach(b => b.classList.toggle("active", b === btn));
+    submit.textContent = "Log in as " + kind;
+    staffNote.classList.toggle("hidden", kind !== "staff");
+    NW.show(error, "");
+  }));
+
+  document.getElementById("login-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    NW.show(error, "");
+    submit.disabled = true;
+    try {
+      const data = await NW.api("/api/login", {
+        method: "POST",
+        body: {
+          email: document.getElementById("email").value.trim(),
+          password: document.getElementById("password").value,
+          kind,
+        },
+      });
+      NW.save(data);   // {token, name, role, block_id}
+      location.href = NW.homeFor(data.role);
+    } catch (err) {
+      NW.show(error, err.message);
+      submit.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

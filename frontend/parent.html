@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Gate Pass</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap">
+  <div style="margin: 24px 0 16px">
+    <div class="brand" style="font-size:1.4rem">Night<span>Watch</span></div>
+    <p class="muted">Gate pass request</p>
+  </div>
+
+  <section class="card" id="card">
+    <p class="muted" id="loading">Loading…</p>
+    <div id="msg" class="msg hidden"></div>
+
+    <div id="details" class="hidden">
+      <h1 id="student"></h1>
+      <p>is asking to leave the hostel on</p>
+      <p class="status-big" id="date"></p>
+      <label>Reason given</label>
+      <p id="reason" style="padding:10px 12px;background:var(--bg);border-radius:8px"></p>
+      <p class="muted">If you approve, the block warden gives the final approval. The pass is for this one day only.</p>
+      <div class="row">
+        <button class="btn ok" style="flex:1" data-decision="approve">Approve</button>
+        <button class="btn bad" style="flex:1" data-decision="reject">Reject</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="muted">This link works once and expires 24 hours after it was sent.</p>
+</main>
+
+<script src="api.js"></script>
+<script>
+  // No login: the secret token in the link (?t=...) is what proves this is the parent.
+  const t = new URLSearchParams(location.search).get("t");
+  const msg = document.getElementById("msg");
+  const details = document.getElementById("details");
+  const loading = document.getElementById("loading");
+
+  async function load() {
+    if (!t) {
+      loading.classList.add("hidden");
+      NW.show(msg, "This link is incomplete. Open it directly from the email.");
+      return;
+    }
+    try {
+      const p = await NW.api("/api/parent/" + encodeURIComponent(t));
+      document.getElementById("student").textContent = p.student;
+      document.getElementById("date").textContent = NW.niceDate(p.date);
+      document.getElementById("reason").textContent = p.reason;
+      details.classList.remove("hidden");
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    loading.classList.add("hidden");
+  }
+
+  details.addEventListener("click", async e => {
+    const btn = e.target.closest("button[data-decision]");
+    if (!btn) return;
+    const approve = btn.dataset.decision === "approve";
+    if (!confirm(approve ? "Approve this gate pass?" : "Reject this gate pass?")) return;
+    details.querySelectorAll("button").forEach(b => b.disabled = true);
+    try {
+      await NW.api("/api/parent/" + encodeURIComponent(t), { method: "POST", body: { decision: btn.dataset.decision } });
+      details.classList.add("hidden");
+      NW.show(msg, approve
+        ? "Thank you. You approved the request. The warden will now review it."
+        : "Thank you. You rejected the request.", "ok");
+    } catch (err) {
+      NW.show(msg, err.message);
+      details.querySelectorAll("button").forEach(b => b.disabled = false);
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>

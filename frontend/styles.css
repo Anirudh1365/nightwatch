@@ -1,0 +1,147 @@
+/* styles.css -- shared look for every NightWatch page. Mobile first. */
+:root {
+  --bg: #f3f4f8;
+  --card: #ffffff;
+  --text: #161a23;
+  --muted: #5b6475;
+  --line: #dfe3ea;
+  --accent: #3346c9;
+  --accent-text: #ffffff;
+  --ok: #17754a;   --ok-bg: #e2f4ea;
+  --warn: #8f5a00; --warn-bg: #fcf0d9;
+  --bad: #b42318;  --bad-bg: #fdeae8;
+  --radius: 12px;
+  /* nightly report chart (checked for colour-blind separation) */
+  --c-ontime: #17754a; --c-late: #d08a00; --c-absent: #b42318;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1117;
+    --card: #171b24;
+    --text: #e8ebf2;
+    --muted: #9aa3b5;
+    --line: #2a3040;
+    --accent: #8292ff;
+    --accent-text: #0e1117;
+    --ok: #5fd39a;   --ok-bg: #12291f;
+    --warn: #f0b75a; --warn-bg: #2d2412;
+    --bad: #ff8a80;  --bad-bg: #331a19;
+    --c-ontime: #30a06a; --c-late: #b5841a; --c-absent: #e35a72;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.wrap { max-width: 480px; margin: 0 auto; padding: 16px; }
+h1, h2, h3 { line-height: 1.25; margin: 0 0 8px; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.1rem; }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.hidden { display: none !important; }
+
+/* top bar with name + logout */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 16px;
+}
+.brand { font-weight: 700; letter-spacing: 0.02em; }
+.brand span { color: var(--accent); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* buttons */
+.btn {
+  display: inline-block; width: 100%;
+  padding: 12px 16px; border: 0; border-radius: 10px;
+  background: var(--accent); color: var(--accent-text);
+  font: inherit; font-weight: 600; cursor: pointer;
+  text-align: center; text-decoration: none;
+}
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.btn.small { width: auto; padding: 6px 12px; font-size: 0.9rem; }
+
+/* form fields */
+label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+input, select, textarea {
+  width: 100%; padding: 10px 12px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--text); font: inherit;
+}
+textarea { resize: vertical; min-height: 70px; }
+
+/* Student / Staff tabs on the login page */
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg); border-radius: 10px; margin-bottom: 16px; }
+.tabs button {
+  flex: 1; padding: 8px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer;
+}
+.tabs button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+
+/* status pills */
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
+.pill.ok   { color: var(--ok);   background: var(--ok-bg); }
+.pill.warn { color: var(--warn); background: var(--warn-bg); }
+.pill.bad  { color: var(--bad);  background: var(--bad-bg); }
+.pill.info { color: var(--muted); background: var(--bg); }
+
+/* inline messages */
+.msg { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.95rem; }
+.msg.error { color: var(--bad); background: var(--bad-bg); }
+.msg.ok    { color: var(--ok);  background: var(--ok-bg); }
+.msg.info  { color: var(--warn); background: var(--warn-bg); }
+
+/* simple list rows */
+.list { list-style: none; margin: 0; padding: 0; }
+.list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.list li:first-child { border-top: 0; }
+
+/* big status line on the student page */
+.status-big { font-size: 1.35rem; font-weight: 700; margin: 4px 0 8px; }
+#reader { width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+
+/* wider pages for staff (laptop screens) */
+.wrap.wide { max-width: 960px; }
+.grid2 { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 800px) { .grid2 { grid-template-columns: 1fr 1fr; } .grid2 > .card { margin-bottom: 0; } }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row select, .row input { width: auto; margin: 0; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.btn.ok  { background: var(--ok);  color: var(--card); }
+.btn.bad { background: var(--bad); color: var(--card); }
+
+/* stat tiles (tonight's counts) */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat { background: var(--bg); border-radius: 10px; padding: 10px; }
+.stat b { display: block; font-size: 1.5rem; line-height: 1.2; }
+.stat span { color: var(--muted); font-size: 0.8rem; }
+
+/* nightly chart */
+.chart-wrap { position: relative; }
+.chart-wrap svg { display: block; width: 100%; height: auto; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 2;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 0.85rem; box-shadow: 0 4px 12px rgb(0 0 0 / 0.15); white-space: nowrap;
+}
+table.data { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.data th, table.data td { text-align: right; padding: 4px 8px; border-top: 1px solid var(--line); }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+details summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-top: 8px; }

@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Student</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <!-- QR scanner that uses the phone camera -->
+  <script src="vendor/html5-qrcode.min.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="brand">Night<span>Watch</span></div>
+      <div class="muted" id="who">&nbsp;</div>
+    </div>
+    <button class="btn secondary small" onclick="NW.logout()">Log out</button>
+  </div>
+
+  <!-- Tonight's attendance -->
+  <section class="card">
+    <h2>Tonight</h2>
+    <div class="status-big" id="status">Loading…</div>
+    <p class="muted" id="status-note"></p>
+
+    <div id="checkin-msg" class="msg hidden"></div>
+    <div id="reader" class="hidden"></div>
+    <button class="btn hidden" id="scan-btn">Scan QR at reception</button>
+    <button class="btn secondary hidden" id="stop-btn" style="margin-top:8px">Cancel</button>
+    <p class="muted" id="scan-help" style="margin:12px 0 0">
+      Connect to your block's Wi-Fi (not mobile data), then scan the code on the reception screen.
+    </p>
+  </section>
+
+  <!-- Gate pass request -->
+  <section class="card">
+    <h2>Request a gate pass</h2>
+    <p class="muted">A pass covers one day. Your parent approves it by email, then your warden.</p>
+    <div id="pass-msg" class="msg hidden"></div>
+    <form id="pass-form">
+      <label for="pass-date">Date</label>
+      <input id="pass-date" type="date" required>
+      <label for="pass-reason">Reason</label>
+      <textarea id="pass-reason" required maxlength="300" placeholder="e.g. Going home for the weekend"></textarea>
+      <button class="btn" id="pass-btn">Send request</button>
+    </form>
+  </section>
+
+  <!-- My passes -->
+  <section class="card">
+    <h2>My passes</h2>
+    <ul class="list" id="passes"><li class="muted">Loading…</li></ul>
+  </section>
+</main>
+
+<script src="api.js"></script>
+<script>
+  const session = NW.requireLogin(["student"]);
+
+  const statusEl = document.getElementById("status");
+  const statusNote = document.getElementById("status-note");
+  const checkinMsg = document.getElementById("checkin-msg");
+  const scanBtn = document.getElementById("scan-btn");
+  const stopBtn = document.getElementById("stop-btn");
+  const scanHelp = document.getElementById("scan-help");
+  const reader = document.getElementById("reader");
+
+  // ---------- tonight's status ----------
+  async function loadMe() {
+    let me;
+    try {
+      me = await NW.api("/api/me");
+    } catch (err) {
+      statusEl.textContent = "Couldn't load";
+      NW.show(checkinMsg, err.message);
+      return;
+    }
+    document.getElementById("who").textContent = `${me.name} · ${me.block} · Room ${me.room}`;
+
+    const t = me.tonight;
+    const start = NW.hhmm(t.window_start), end = NW.hhmm(t.window_end);
+    const opensLater = Date.now() < new Date(t.window_start).getTime();
+    let canScan = true;
+
+    if (t.status === "present") {
+      statusEl.innerHTML = t.late
+        ? '<span class="pill warn">Present · late</span>'
+        : '<span class="pill ok">Present</span>';
+      statusNote.textContent = "You're checked in for tonight. Nothing else to do.";
+      canScan = false;
+    } else if (t.status === "absent") {
+      statusEl.innerHTML = '<span class="pill bad">Marked absent</span>';
+      statusNote.textContent = "If you're back in the hostel now, scan the QR. You'll be marked present (late).";
+    } else if (opensLater) {
+      statusEl.innerHTML = '<span class="pill info">Not open yet</span>';
+      statusNote.textContent = `Check-in opens at ${start}. On time until ${end}.`;
+    } else {
+      statusEl.innerHTML = '<span class="pill warn">Not checked in</span>';
+      statusNote.textContent = `Check-in window ${start}–${end}. After ${end} you can still check in, but it's marked late.`;
+    }
+    scanBtn.classList.toggle("hidden", !canScan);
+    scanHelp.classList.toggle("hidden", !canScan);
+  }
+
+  // ---------- QR scanning + check-in ----------
+  let scanner = null;
+  let busy = false;
+
+  async function stopScanner() {
+    if (scanner) {
+      try { await scanner.stop(); } catch {}
+      scanner = null;
+    }
+    reader.classList.add("hidden");
+    stopBtn.classList.add("hidden");
+    scanBtn.disabled = false;
+  }
+
+  async function onScan(text) {
+    if (busy) return;          // the camera fires many times per second
+    busy = true;
+    await stopScanner();
+    NW.show(checkinMsg, "Checking you in…", "info");
+    try {
+      const res = await NW.api("/api/checkin", { method: "POST", body: { qr_token: text.trim() } });
+      NW.show(checkinMsg, res.message, res.late ? "info" : "ok");
+    } catch (err) {
+      NW.show(checkinMsg, err.message);
+    }
+    busy = false;
+    loadMe();
+  }
+
+  scanBtn.addEventListener("click", async () => {
+    NW.show(checkinMsg, "");
+    if (!window.isSecureContext) {
+      NW.show(checkinMsg, "The camera only works on a secure (https://) page. Ask the organisers for the https link.");
+      return;
+    }
+    if (typeof Html5Qrcode === "undefined") {
+      NW.show(checkinMsg, "The QR scanner didn't load. Reload the page.");
+      return;
+    }
+    scanBtn.disabled = true;
+    reader.classList.remove("hidden");
+    stopBtn.classList.remove("hidden");
+    scanner = new Html5Qrcode("reader");
+    try {
+      await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 220 }, onScan, () => {});
+    } catch (err) {
+      await stopScanner();
+      NW.show(checkinMsg, "Couldn't open the camera. Allow camera access for this site and try again.");
+    }
+  });
+  stopBtn.addEventListener("click", stopScanner);
+
+  // ---------- gate passes ----------
+  const PASS_LABELS = {
+    pending_parent: ["Waiting for parent", "info"],
+    pending_warden: ["Waiting for warden", "warn"],
+    approved: ["Approved", "ok"],
+    rejected: ["Rejected", "bad"],
+  };
+
+  async function loadPasses() {
+    const list = document.getElementById("passes");
+    try {
+      const passes = await NW.api("/api/passes/mine");
+      if (!passes.length) {
+        list.innerHTML = '<li class="muted">No passes yet.</li>';
+        return;
+      }
+      list.innerHTML = passes.map(p => {
+        const [label, kind] = PASS_LABELS[p.status] || [p.status, "info"];
+        return `<li>
+          <div><strong>${NW.esc(NW.niceDate(p.date))}</strong><div class="muted">${NW.esc(p.reason)}</div></div>
+          <span class="pill ${kind}">${label}</span>
+        </li>`;
+      }).join("");
+    } catch (err) {
+      list.innerHTML = `<li class="muted">${NW.esc(err.message)}</li>`;
+    }
+  }
+
+  const dateInput = document.getElementById("pass-date");
+  const today = new Date();
+  dateInput.min = dateInput.value =
+    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  document.getElementById("pass-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const msg = document.getElementById("pass-msg");
+    const btn = document.getElementById("pass-btn");
+    btn.disabled = true;
+    try {
+      await NW.api("/api/passes", {
+        method: "POST",
+        body: { pass_date: dateInput.value, reason: document.getElementById("pass-reason").value.trim() },
+      });
+      NW.show(msg, "Request sent. Your parent has been emailed a link to approve it.", "ok");
+      document.getElementById("pass-reason").value = "";
+      loadPasses();
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    btn.disabled = false;
+  });
+
+  loadMe();
+  loadPasses();
+</script>
+</body>
+</html>

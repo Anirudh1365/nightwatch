@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch Reception</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <!-- draws the QR code -->
+  <script src="vendor/qrcode.min.js"></script>
+  <style>
+    /* Always light, whatever the device theme: phone cameras read dark-on-white best. */
+    body { background: #ffffff; color: #161a23; min-height: 100vh; }
+    .screen {
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center;
+    }
+    .block-name { font-size: clamp(1.6rem, 5vw, 3rem); font-weight: 800; margin: 0; }
+    .hint { font-size: clamp(1rem, 2.4vw, 1.4rem); color: #5b6475; margin: 0; }
+    #qr { padding: 16px; background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; }
+    #qr img, #qr canvas { width: min(70vmin, 520px) !important; height: auto !important; display: block; }
+    .timer { width: min(70vmin, 520px); height: 6px; background: #eceef3; border-radius: 3px; overflow: hidden; }
+    .timer div { height: 100%; background: #3346c9; transition: width 1s linear; }
+    #clock { font-variant-numeric: tabular-nums; font-size: 1.1rem; color: #5b6475; }
+    .corner { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; }
+    .corner .btn { background: #fff; color: #161a23; border: 1px solid #dfe3ea; }
+    .corner select { width: auto; margin: 0; background: #fff; color: #161a23; border-color: #dfe3ea; }
+    #status { min-height: 1.5em; color: #b42318; }
+  </style>
+</head>
+<body>
+<div class="corner">
+  <select id="block"></select>
+  <button class="btn small" id="fs">Full screen</button>
+  <a class="btn small" href="index.html" id="back">Back</a>
+</div>
+
+<main class="screen">
+  <h1 class="block-name" id="name">NightWatch</h1>
+  <p class="hint">Connect to the block Wi-Fi, open NightWatch and scan to check in</p>
+  <div id="qr"></div>
+  <div class="timer"><div id="bar" style="width:100%"></div></div>
+  <div id="clock"></div>
+  <div id="status"></div>
+</main>
+
+<script src="api.js"></script>
+<script>
+  const session = NW.requireLogin(["guard", "warden", "chief"]);
+  document.getElementById("back").href = NW.homeFor(session.role);
+
+  const blockSelect = document.getElementById("block");
+  const bar = document.getElementById("bar");
+  const statusEl = document.getElementById("status");
+  let blockId = null;
+  let qr = null;
+  let timer = null;
+  let slotLength = 15;
+
+  // Fetch the current token, draw it, and come back when it's about to change.
+  async function refresh() {
+    clearTimeout(timer);
+    try {
+      const data = await NW.api(`/api/blocks/${blockId}/qr`);
+      if (!qr) {
+        qr = new QRCode(document.getElementById("qr"), {
+          text: data.token, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M,
+        });
+      } else {
+        qr.makeCode(data.token);
+      }
+      statusEl.textContent = "";
+      startBar(data.refresh_in);
+      timer = setTimeout(refresh, data.refresh_in * 1000 + 300);
+    } catch (err) {
+      statusEl.textContent = "Can't reach the server, retrying… (" + err.message + ")";
+      timer = setTimeout(refresh, 3000);
+    }
+  }
+
+  // Bar that empties as the code gets closer to changing.
+  let barTick = null;
+  function startBar(seconds) {
+    clearInterval(barTick);
+    let left = seconds;
+    const draw = () => { bar.style.width = Math.max(0, (left / slotLength) * 100) + "%"; };
+    draw();
+    barTick = setInterval(() => { left -= 1; draw(); }, 1000);
+  }
+
+  // Campus clock, so people can see when the window closes.
+  function tick() {
+    document.getElementById("clock").textContent =
+      new Date().toLocaleTimeString([], { timeZone: "Asia/Dubai", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+  setInterval(tick, 1000);
+  tick();
+
+  // Keep the screen from sleeping (works on most modern browsers).
+  async function keepAwake() {
+    try { await navigator.wakeLock.request("screen"); } catch {}
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) keepAwake(); });
+  keepAwake();
+
+  document.getElementById("fs").addEventListener("click", () => {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+
+  function showBlock(id) {
+    blockId = id;
+    document.getElementById("name").textContent = blockSelect.selectedOptions[0].textContent;
+    refresh();
+  }
+
+  if (typeof QRCode === "undefined") {
+    statusEl.textContent = "The QR library didn't load. Reload the page.";
+  } else {
+    NW.blockPicker(blockSelect, showBlock)
+      .then(showBlock)
+      .catch(err => { statusEl.textContent = err.message; });
+  }
+</script>
+</body>
+</html>
