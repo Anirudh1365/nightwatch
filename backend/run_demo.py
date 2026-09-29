@@ -14,6 +14,7 @@ self-made. Tap Advanced -> Proceed. The camera works after that.
 """
 import datetime
 import ipaddress
+import logging
 import os
 import socket
 import sys
@@ -82,7 +83,15 @@ def make_cert(ips: list[str]):
     print(f"Made a new HTTPS certificate for: localhost, {', '.join(all_ips)}")
 
 
+class HideConnectionReset(logging.Filter):
+    """On Windows, Python prints a scary ConnectionResetError traceback every time a phone
+    or browser closes an HTTPS connection. It's harmless, so keep it out of the demo terminal."""
+    def filter(self, record):
+        return not (record.exc_info and isinstance(record.exc_info[1], ConnectionResetError))
+
+
 def main():
+    logging.getLogger("asyncio").addFilter(HideConnectionReset())
     ips = local_ips()
     if not cert_covers(ips):
         make_cert(ips)
