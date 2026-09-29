@@ -11,7 +11,6 @@ class Block(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(50), unique=True)
     gender: Mapped[str] = mapped_column(String(10))            # Male / Female
-    wifi_subnet: Mapped[str] = mapped_column(String(50))       # e.g. 10.20.1.0/24
     window_start: Mapped[str] = mapped_column(String(5), default="23:30")
     window_end: Mapped[str] = mapped_column(String(5), default="00:00")
 

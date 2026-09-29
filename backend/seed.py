@@ -20,8 +20,8 @@ Base.metadata.create_all(engine)
 db = SessionLocal()
 pw = hash_password("demo123")
 
-a = Block(name="Block A", gender="Male", wifi_subnet="192.168.137.0/24")   # Windows hotspot default
-g = Block(name="Block G", gender="Female", wifi_subnet="192.168.43.0/24")   # Android hotspot default
+a = Block(name="Block A", gender="Male")
+g = Block(name="Block G", gender="Female")
 db.add_all([a, g])
 db.flush()
 

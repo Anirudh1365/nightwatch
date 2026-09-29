@@ -1,7 +1,10 @@
 """run_demo.py -- start NightWatch over HTTPS so phones can use the camera.
 
-    python run_demo.py                  # normal demo (Wi-Fi check ON)
-    python run_demo.py --no-wifi-check  # e.g. rehearsing without the hotspot
+    python run_demo.py                  # normal demo (campus Wi-Fi check ON)
+    python run_demo.py --no-wifi-check  # e.g. rehearsing off campus
+
+The laptop and the phones should all be on the campus Wi-Fi (BITS-Student).
+To show a refusal, put a phone on the laptop's own hotspot: that isn't campus Wi-Fi.
 
 What it does:
 1. Makes a self-signed HTTPS certificate in backend/certs/ the first time (and again only
@@ -96,20 +99,30 @@ def main():
     if not cert_covers(ips):
         make_cert(ips)
 
-    # Phones on the Windows hotspot reach the laptop at 192.168.137.1.
-    public_ip = WINDOWS_HOTSPOT_IP if WINDOWS_HOTSPOT_IP in ips else (ips[0] if ips else "127.0.0.1")
-    os.environ.setdefault("BASE_URL", f"https://{public_ip}:{PORT}")   # used in parent email links
     if "--no-wifi-check" in sys.argv:
         os.environ["ENFORCE_NETWORK"] = "false"
+    from config import CAMPUS_NETWORKS
+    from night import on_campus_network
+
+    # Phones on BITS-Student reach the laptop at its campus address.
+    campus_ips = [ip for ip in ips if on_campus_network(ip)]
+    public_ip = campus_ips[0] if campus_ips else (ips[0] if ips else "127.0.0.1")
+    os.environ.setdefault("BASE_URL", f"https://{public_ip}:{PORT}")   # used in parent email links
 
     print("\nNightWatch is starting.")
     print(f"  On this laptop:  https://localhost:{PORT}")
     for ip in ips:
-        note = "  <- phones on the laptop hotspot use this" if ip == WINDOWS_HOTSPOT_IP else ""
+        if ip in campus_ips:
+            note = "  <- phones on BITS-Student use this"
+        elif ip == WINDOWS_HOTSPOT_IP:
+            note = "  <- laptop hotspot: NOT campus Wi-Fi, check-in is refused here"
+        else:
+            note = ""
         print(f"  On a phone:      https://{ip}:{PORT}{note}")
-    if WINDOWS_HOTSPOT_IP not in ips:
-        print("  (Laptop hotspot is off. Turn on Mobile hotspot in Windows settings for the Wi-Fi demo.)")
-    print(f"  Wi-Fi check: {'OFF' if os.environ.get('ENFORCE_NETWORK') == 'false' else 'ON'}")
+    if not campus_ips:
+        print("  (This laptop isn't on the campus Wi-Fi. Connect it to BITS-Student so phones can reach it.)")
+    check = "OFF" if os.environ.get("ENFORCE_NETWORK") == "false" else "ON"
+    print(f"  Campus Wi-Fi check: {check} (campus = {', '.join(CAMPUS_NETWORKS)})")
     print("  First visit on each phone: tap Advanced -> Proceed on the certificate warning.\n")
 
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, ssl_keyfile=KEY, ssl_certfile=CERT)

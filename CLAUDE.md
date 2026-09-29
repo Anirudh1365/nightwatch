@@ -22,8 +22,12 @@ Scanning). Deadline: 3 October 2026. Campus: BITS Pilani Dubai. Read README.md f
 - Check-in window per block: 23:30–00:00. After 00:00 still allowed but marked late.
   A "night" runs noon to noon.
 - Check-in requires BOTH: scanning a QR on the reception screen that rotates every 15 s,
-  AND the request coming from the block's Wi-Fi subnet (checked server-side from the
-  connection IP). No GPS — it is easy to fake and unreliable indoors.
+  AND the request coming from the campus Wi-Fi (BITS-Student), checked server-side from the
+  connection IP against CAMPUS_NETWORKS in config.py (default 10.30.0.0/16). The team
+  decided "on campus vs mobile data" is enough; block identity comes from the block's QR.
+  No GPS — it is easy to fake and unreliable indoors.
+- ERP (Oracle APEX on Oracle Cloud) is not integrated; NightWatch runs beside it. A cloud
+  server can't see per-device campus IPs, only the campus public IP.
 - Approved gate pass for that date = excused.
 - Taker visits only unmarked rooms + ~5 random spot checks among students who self-checked in.
   Manual "present" needs a reason (asleep / sick / phone_issue / other).

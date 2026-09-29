@@ -116,7 +116,10 @@ ok("3 absences in 14 nights -> flagged + email queued")
 print("\nreport:", c.get("/api/reports/nightly", headers=warden).json())
 
 # --- network check
-b = Block(name="x", gender="Male", wifi_subnet="192.168.137.0/24")
-assert nt.on_block_network("192.168.137.23", b) and not nt.on_block_network("5.31.10.2", b)
-ok("hostel Wi-Fi subnet accepted, mobile-data IP rejected")
+campus = ["10.30.0.0/16"]
+assert nt.on_campus_network("10.30.87.248", campus)          # phone on BITS-Student
+assert not nt.on_campus_network("5.31.10.2", campus)         # mobile data
+assert not nt.on_campus_network("192.168.137.23", campus)    # someone else's hotspot
+assert not nt.on_campus_network(None, campus) and not nt.on_campus_network("junk", campus)
+ok("campus Wi-Fi accepted, mobile data and other networks rejected")
 print("\nALL TESTS PASSED")

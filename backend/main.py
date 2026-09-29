@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 import night as nt
 from auth import (check_password, current_student, make_token, staff_with,
                   require_block_access)
-from config import (ENFORCE_NETWORK, BASE_URL, SPOT_CHECKS_PER_NIGHT,
+from config import (ENFORCE_NETWORK, CAMPUS_NETWORKS, BASE_URL, SPOT_CHECKS_PER_NIGHT,
                     FLAG_WINDOW_NIGHTS, FLAG_MAX_ABSENCES, FLAG_MAX_MANUAL)
 from db import Base, engine, get_db
 from models import Attendance, Block, GatePass, Outbox, Staff, Student
@@ -99,9 +99,9 @@ def checkin(data: CheckInIn, request: Request,
     if not nt.qr_valid(data.qr_token, block.id):
         log_checkin(s, ip, "REFUSED - QR expired or from another block")
         raise HTTPException(400, "QR code expired or not from your block. Scan the screen at your reception again.")
-    if ENFORCE_NETWORK and not nt.on_block_network(ip, block):
-        log_checkin(s, ip, f"REFUSED - not on {block.name} Wi-Fi (expects {block.wifi_subnet})")
-        raise HTTPException(400, "Connect to your hostel block's Wi-Fi (not mobile data) and try again.")
+    if ENFORCE_NETWORK and not nt.on_campus_network(ip):
+        log_checkin(s, ip, f"REFUSED - not on campus Wi-Fi (allowed: {', '.join(CAMPUS_NETWORKS)})")
+        raise HTTPException(400, "Connect to the campus Wi-Fi (BITS-Student), not mobile data, and try again.")
     moment = nt.now()
     night, timing = nt.classify(block, moment)
     if timing == "too_early":

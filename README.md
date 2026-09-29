@@ -1,7 +1,7 @@
 # NightWatch - Hostel Night Attendance (CampusOPS PS03)
 
 Students check in on their phone between 23:30 and 00:00 by scanning a QR on the
-reception screen while connected to their block's Wi-Fi. The attendance taker only
+reception screen while connected to the campus Wi-Fi. The attendance taker only
 visits rooms that didn't check in, plus a few random spot checks. Gate passes are
 approved by the parent (email link) and the warden, and excuse the student for that day.
 
@@ -30,32 +30,39 @@ Uses SQLite by default. For MySQL:
 | Students (Block G) | ananya@, diya@ ... @demo.edu |
 
 ## The Wi-Fi check (how to demo it)
-The server checks the *connection's* IP address against the block's subnet. The phone
-reports nothing, so fake-GPS apps don't help.
-- Turn on a hotspot on the laptop running the server (Windows hotspot = 192.168.137.x,
-  already set for Block A in seed.py). Check your subnet with `ipconfig` / `ip a` and
-  edit `wifi_subnet` in seed.py if different.
-- Phone on that hotspot -> check-in works. Same phone on mobile data -> rejected.
+The server checks the *connection's* IP address, so the phone reports nothing and
+fake-GPS apps don't help. Check-in only works from the campus Wi-Fi (BITS-Student).
+Mobile data or home Wi-Fi is refused. Which block the student is in comes from the QR:
+each reception screen shows its own block's code, and spot checks back it up.
+- Campus ranges are set by `CAMPUS_NETWORKS` (default `10.30.0.0/16`, BITS-Student gave
+  us 10.30.64.0/19). Comma-separate several ranges. Confirm the real list with IT.
+- If the server ever runs in the cloud (e.g. next to the ERP, which is on Oracle Cloud),
+  every campus phone arrives from the campus's public IP: put that IP in `CAMPUS_NETWORKS`.
 - Do NOT use ngrok/tunnels for this demo: every request would come from the tunnel's IP.
-- For API testing without the hotspot: `ENFORCE_NETWORK=false uvicorn main:app`
+- For API testing off campus: `ENFORCE_NETWORK=false uvicorn main:app`
 
-## Phone demo (HTTPS + hotspot)
+## Phone demo (HTTPS on campus Wi-Fi)
 Phone browsers only allow the camera on HTTPS. One command sets that up:
 ```bash
 cd backend
 python seed.py --history     # demo data with 2 weeks of past nights
-python run_demo.py           # HTTPS on port 8000, Wi-Fi check ON
+python run_demo.py           # HTTPS on port 8000, campus Wi-Fi check ON
 ```
 It makes a self-signed certificate in `backend/certs/` the first time, prints the address
 to open on phones, and points parent email links at the laptop.
-1. Turn on **Mobile hotspot** in Windows settings (phones then reach the laptop at 192.168.137.1).
+1. Laptop and phone both on **BITS-Student**. `run_demo.py` prints the laptop's campus
+   address (e.g. `https://10.30.83.168:8000`); it changes when the laptop reconnects.
 2. The first time, Windows Firewall asks about Python: allow it (tick public networks too,
-   hotspots often count as public).
-3. On the phone, open `https://192.168.137.1:8000`, tap Advanced -> Proceed on the
-   certificate warning, log in as a Block A student.
+   BITS-Student counts as public).
+3. On the phone, open that address, tap Advanced -> Proceed on the certificate warning,
+   log in as a Block A student.
 4. Reception screen: log in as `guard.a@demo.edu` on the laptop -> Open reception screen.
-5. Scan -> checked in. Switch the phone to mobile data -> check-in is refused.
+5. Scan -> checked in.
+6. To show a refusal: turn on the laptop's **Mobile hotspot**, put a phone on it, open
+   `https://192.168.137.1:8000` and scan as another student. The hotspot isn't campus
+   Wi-Fi, so it's refused. (Real mobile data can't reach a laptop on the campus network at all.)
 
+Every check-in attempt prints a `[check-in]` line in the terminal with the reason.
 `python run_demo.py --no-wifi-check` turns the Wi-Fi check off for rehearsals.
 
 ## Main endpoints
@@ -105,8 +112,12 @@ The QR scanner and QR drawing libraries are saved in `frontend/vendor/`, so the 
 without internet.
 
 ## Known limits (say these in the pitch)
-- A friend in the lobby could forward the live QR to someone *inside* the Wi-Fi range
-  but not in the block; spot checks cover this.
+- The Wi-Fi check proves "on campus", not "in this block". A friend in the lobby could
+  forward the live QR to someone elsewhere on campus; the 30 s QR life and random spot
+  checks cover this. If a block ever needs more, a small Wi-Fi router at its reception
+  (check-in only on that network) is a cheap upgrade.
 - Parent email is the trust anchor, same as today.
-- Production needs the university's student list, parent emails and per-block subnets from IT.
+- Production needs the university's student list, parent emails and campus Wi-Fi ranges from IT.
+- ERP: NightWatch runs beside it (link from the ERP home page); single sign-on and
+  importing student data from the ERP are phase 2.
 - Phase 2: link the main-gate face scanner log to catch anyone who left without a pass.

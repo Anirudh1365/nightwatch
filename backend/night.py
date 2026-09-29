@@ -6,7 +6,7 @@ import random
 import time
 from datetime import datetime, date, timedelta
 
-from config import TZ, SECRET_KEY, QR_SLOT_SECONDS
+from config import TZ, SECRET_KEY, QR_SLOT_SECONDS, CAMPUS_NETWORKS
 from models import Block
 
 
@@ -70,12 +70,14 @@ def qr_valid(token: str, block_id: int, at: float | None = None) -> bool:
     return hmac.compare_digest(sig, _sign(f"qr:{block_id}:{slot}"))
 
 
-# ---------- hostel Wi-Fi check (done by the server, not the phone) ----------
-def on_block_network(client_ip: str | None, block: Block) -> bool:
+# ---------- campus Wi-Fi check (done by the server, not the phone) ----------
+def on_campus_network(client_ip: str | None, networks: list[str] = CAMPUS_NETWORKS) -> bool:
+    """True if the phone's connection comes from the campus Wi-Fi, not mobile data."""
     if not client_ip:
         return False
     try:
-        return ipaddress.ip_address(client_ip) in ipaddress.ip_network(block.wifi_subnet)
+        ip = ipaddress.ip_address(client_ip)
+        return any(ip in ipaddress.ip_network(n, strict=False) for n in networks)
     except ValueError:
         return False
 
