@@ -46,11 +46,13 @@ each reception screen shows its own block's code, and spot checks back it up.
 Phone browsers only allow the camera on HTTPS. One command sets that up:
 ```bash
 cd backend
-python run_demo.py --pretend 23:45 --reset   # fresh demo data + server acts as if it's 23:45
+python run_demo.py --pretend 23:35 --reset   # fresh demo data + server acts as if it's 23:35
 ```
 `--pretend` matters: check-in only opens at 23:30, so a daytime demo without it gets
 "Check-in opens at 23:30" (or everyone marked late before noon). `--reset` reloads the demo
-data (`seed.py --history`) using the same pretend clock. Plain `python run_demo.py` uses real time.
+data (`seed.py --history`) using the same pretend clock. The pretend clock keeps ticking, so
+23:35 gives about 25 minutes of on-time check-ins; restart without `--reset` to reset the clock
+and keep the data. Plain `python run_demo.py` uses real time.
 It makes a self-signed certificate in `backend/certs/` the first time, prints the address
 to open on phones, and points parent email links at the laptop.
 1. Laptop and phone both on **BITS-Student**. `run_demo.py` prints the laptop's campus
