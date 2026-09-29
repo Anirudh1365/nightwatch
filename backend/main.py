@@ -86,24 +86,33 @@ class CheckInIn(BaseModel):
     qr_token: str
 
 
+def log_checkin(s: Student, ip: str | None, outcome: str):
+    """One line per check-in attempt in the server terminal, so refusals are easy to explain."""
+    print(f"[check-in] {nt.now():%H:%M:%S} {s.name} ({s.block.name}, {s.room}) from {ip or '?'}: {outcome}", flush=True)
+
+
 @app.post("/api/checkin")
 def checkin(data: CheckInIn, request: Request,
             s: Student = Depends(current_student), db: Session = Depends(get_db)):
     block = s.block
-    if not nt.qr_valid(data.qr_token, block.id):
-        raise HTTPException(400, "QR code expired or not from your block. Scan the screen at your reception again.")
     ip = request.client.host if request.client else None
+    if not nt.qr_valid(data.qr_token, block.id):
+        log_checkin(s, ip, "REFUSED - QR expired or from another block")
+        raise HTTPException(400, "QR code expired or not from your block. Scan the screen at your reception again.")
     if ENFORCE_NETWORK and not nt.on_block_network(ip, block):
+        log_checkin(s, ip, f"REFUSED - not on {block.name} Wi-Fi (expects {block.wifi_subnet})")
         raise HTTPException(400, "Connect to your hostel block's Wi-Fi (not mobile data) and try again.")
     moment = nt.now()
     night, timing = nt.classify(block, moment)
     if timing == "too_early":
         start, _ = nt.window(block, night)
+        log_checkin(s, ip, f"REFUSED - too early, opens {start:%H:%M}")
         raise HTTPException(400, f"Check-in opens at {start:%H:%M}.")
 
     rec = db.scalar(select(Attendance).where(Attendance.student_id == s.id,
                                              Attendance.night == night))
     if rec and rec.status == "present":
+        log_checkin(s, ip, "already present")
         return {"message": "Already marked present tonight", "late": rec.late}
     if rec:   # taker marked absent earlier, student came back later
         rec.status, rec.late, rec.method = "present", True, "self"
@@ -115,6 +124,7 @@ def checkin(data: CheckInIn, request: Request,
                          marked_at=local_now_naive(), client_ip=ip)
         db.add(rec)
     db.commit()
+    log_checkin(s, ip, "present" + (" (late)" if rec.late else ""))
     return {"message": "Marked present" + (" (late)" if rec.late else ""),
             "late": rec.late, "time": rec.marked_at}
 
