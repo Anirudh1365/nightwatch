@@ -2,6 +2,8 @@
 
     python run_demo.py                  # normal demo (campus Wi-Fi check ON)
     python run_demo.py --no-wifi-check  # e.g. rehearsing off campus
+    python run_demo.py --pretend 23:45  # daytime demo: server acts as if it's 23:45 now
+    python run_demo.py --pretend 23:45 --reset   # same, plus fresh demo data (seed.py --history)
 
 The laptop and the phones should all be on the campus Wi-Fi (BITS-Student).
 To show a refusal, put a phone on the laptop's own hotspot: that isn't campus Wi-Fi.
@@ -86,6 +88,18 @@ def make_cert(ips: list[str]):
     print(f"Made a new HTTPS certificate for: localhost, {', '.join(all_ips)}")
 
 
+def clock_offset_for(hhmm: str) -> int:
+    """Seconds to add to real time so the server's clock reads hhmm right now."""
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(os.getenv("CAMPUS_TZ", "Asia/Dubai"))
+    real = datetime.datetime.now(tz)
+    h, m = map(int, hhmm.split(":"))
+    target = real.replace(hour=h, minute=m, second=0, microsecond=0)
+    if h < 12 and real.hour >= 12:   # "00:10" during an afternoon demo = just after midnight tonight
+        target += datetime.timedelta(days=1)
+    return int((target - real).total_seconds())
+
+
 class HideConnectionReset(logging.Filter):
     """On Windows, Python prints a scary ConnectionResetError traceback every time a phone
     or browser closes an HTTPS connection. It's harmless, so keep it out of the demo terminal."""
@@ -101,6 +115,13 @@ def main():
 
     if "--no-wifi-check" in sys.argv:
         os.environ["ENFORCE_NETWORK"] = "false"
+    pretend = None
+    if "--pretend" in sys.argv:
+        pretend = sys.argv[sys.argv.index("--pretend") + 1]
+        os.environ["CLOCK_OFFSET_SECONDS"] = str(clock_offset_for(pretend))
+    if "--reset" in sys.argv:   # fresh demo data, with history that ends just before "tonight"
+        import subprocess
+        subprocess.run([sys.executable, "seed.py", "--history"], check=True)
     from config import CAMPUS_NETWORKS
     from night import on_campus_network
 
@@ -123,6 +144,8 @@ def main():
         print("  (This laptop isn't on the campus Wi-Fi. Connect it to BITS-Student so phones can reach it.)")
     check = "OFF" if os.environ.get("ENFORCE_NETWORK") == "false" else "ON"
     print(f"  Campus Wi-Fi check: {check} (campus = {', '.join(CAMPUS_NETWORKS)})")
+    if pretend:
+        print(f"  Demo clock: the server is pretending it's {pretend} now (real time keeps ticking from there)")
     print("  First visit on each phone: tap Advanced -> Proceed on the certificate warning.\n")
 
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, ssl_keyfile=KEY, ssl_certfile=CERT)

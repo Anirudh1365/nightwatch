@@ -9,6 +9,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 TZ = ZoneInfo(os.getenv("CAMPUS_TZ", "Asia/Dubai"))
 
 QR_SLOT_SECONDS = int(os.getenv("QR_SLOT_SECONDS", "15"))   # QR changes this often
+# Demo clock: shift the server's idea of "now" so a daytime demo can happen "at 23:45".
+# Set by `python run_demo.py --pretend 23:45`. 0 = real time.
+CLOCK_OFFSET_SECONDS = int(os.getenv("CLOCK_OFFSET_SECONDS", "0"))
 ENFORCE_NETWORK = os.getenv("ENFORCE_NETWORK", "true").lower() == "true"
 # Address ranges that count as "on campus Wi-Fi". Check-in from anywhere else (mobile data,
 # home Wi-Fi) is refused. BITS-Student gave us 10.30.64.0/19, and hostel blocks were checked

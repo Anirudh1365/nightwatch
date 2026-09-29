@@ -6,12 +6,13 @@ import random
 import time
 from datetime import datetime, date, timedelta
 
-from config import TZ, SECRET_KEY, QR_SLOT_SECONDS, CAMPUS_NETWORKS
+from config import TZ, SECRET_KEY, QR_SLOT_SECONDS, CAMPUS_NETWORKS, CLOCK_OFFSET_SECONDS
 from models import Block
 
 
 def now() -> datetime:
-    return datetime.now(TZ)
+    """Campus time (shifted by the demo clock, if one is set)."""
+    return datetime.now(TZ) + timedelta(seconds=CLOCK_OFFSET_SECONDS)
 
 
 def night_of(moment: datetime) -> date:

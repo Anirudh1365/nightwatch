@@ -81,7 +81,7 @@
 
     const t = me.tonight;
     const start = NW.hhmm(t.window_start), end = NW.hhmm(t.window_end);
-    const opensLater = Date.now() < new Date(t.window_start).getTime();
+    const opensLater = new Date(me.now).getTime() < new Date(t.window_start).getTime();   // server time, not the phone's
     let canScan = true;
 
     if (t.status === "present") {

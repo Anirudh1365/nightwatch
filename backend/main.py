@@ -77,6 +77,7 @@ def me(s: Student = Depends(current_student), db: Session = Depends(get_db)):
                                              Attendance.night == tonight))
     start, end = nt.window(s.block, tonight)
     return {"name": s.name, "block": s.block.name, "room": s.room,
+            "now": nt.now(),
             "tonight": {"night": tonight, "window_start": start, "window_end": end,
                         "status": rec.status if rec else "not_marked",
                         "late": rec.late if rec else None}}
@@ -246,7 +247,7 @@ def reception_qr(bid: int, st: Staff = Depends(staff_with("guard", "warden", "ch
                  db: Session = Depends(get_db)):
     require_block_access(st, bid)
     token, remaining = nt.qr_token(bid)
-    return {"token": token, "refresh_in": remaining}
+    return {"token": token, "refresh_in": remaining, "now": nt.now()}
 
 
 # ============================================================ NIGHT (taker / warden)

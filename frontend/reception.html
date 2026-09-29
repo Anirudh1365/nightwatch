@@ -70,6 +70,7 @@
         qr.makeCode(data.token);
       }
       statusEl.textContent = "";
+      clockOffset = new Date(data.now).getTime() - Date.now();
       startBar(data.refresh_in);
       timer = setTimeout(refresh, data.refresh_in * 1000 + 300);
     } catch (err) {
@@ -88,10 +89,11 @@
     barTick = setInterval(() => { left -= 1; draw(); }, 1000);
   }
 
-  // Campus clock, so people can see when the window closes.
+  // Campus clock, so people can see when the window closes. Follows the server's time.
+  let clockOffset = 0;
   function tick() {
     document.getElementById("clock").textContent =
-      new Date().toLocaleTimeString([], { timeZone: "Asia/Dubai", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      new Date(Date.now() + clockOffset).toLocaleTimeString([], { timeZone: "Asia/Dubai", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
   setInterval(tick, 1000);
   tick();
