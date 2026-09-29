@@ -81,6 +81,12 @@ input, select, textarea {
   background: var(--bg); color: var(--text); font: inherit;
 }
 textarea { resize: vertical; min-height: 70px; }
+/* iPhone Safari draws date boxes wider than their container unless told not to */
+input[type="date"] {
+  -webkit-appearance: none; appearance: none;
+  display: block; min-width: 0; max-width: 100%; min-height: 44px;
+}
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
 /* Student / Staff tabs on the login page */
 .tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg); border-radius: 10px; margin-bottom: 16px; }

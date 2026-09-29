@@ -35,7 +35,8 @@ fake-GPS apps don't help. Check-in only works from the campus Wi-Fi (BITS-Studen
 Mobile data or home Wi-Fi is refused. Which block the student is in comes from the QR:
 each reception screen shows its own block's code, and spot checks back it up.
 - Campus ranges are set by `CAMPUS_NETWORKS` (default `10.30.0.0/16`, BITS-Student gave
-  us 10.30.64.0/19). Comma-separate several ranges. Confirm the real list with IT.
+  us 10.30.64.0/19; hostel blocks checked on 29 Sep 2026 also get 10.30.x). Comma-separate
+  several ranges if IT adds more.
 - If the server ever runs in the cloud (e.g. next to the ERP, which is on Oracle Cloud),
   every campus phone arrives from the campus's public IP: put that IP in `CAMPUS_NETWORKS`.
 - Do NOT use ngrok/tunnels for this demo: every request would come from the tunnel's IP.
