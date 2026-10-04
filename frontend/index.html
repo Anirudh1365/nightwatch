@@ -15,11 +15,6 @@
   </div>
 
   <form class="card" id="login-form">
-    <div class="tabs" role="tablist">
-      <button type="button" class="active" data-kind="student">Student</button>
-      <button type="button" data-kind="staff">Staff</button>
-    </div>
-
     <div id="error" class="msg error hidden"></div>
 
     <label for="email">Email</label>
@@ -28,13 +23,8 @@
     <label for="password">Password</label>
     <input id="password" type="password" autocomplete="current-password" required>
 
-    <button class="btn" id="submit">Log in as student</button>
-    <p class="muted" id="staff-note" style="margin:12px 0 0">
-      Staff: wardens, attendance takers, guards and the chief warden all log in here.
-    </p>
+    <button class="btn" id="submit">Login</button>
   </form>
-
-  <p class="muted">Parents don't need an account. You get a one-time link by email when your child asks for a gate pass.</p>
 </main>
 
 <script src="api.js"></script>
@@ -43,20 +33,9 @@
   const existing = NW.session();
   if (existing) location.href = NW.homeFor(existing.role);
 
-  let kind = "student";
-  const tabs = document.querySelectorAll(".tabs button");
+  // One login for everyone: the server works out who you are and we send you to your page.
   const submit = document.getElementById("submit");
   const error = document.getElementById("error");
-  const staffNote = document.getElementById("staff-note");
-  staffNote.classList.add("hidden");
-
-  tabs.forEach(btn => btn.addEventListener("click", () => {
-    kind = btn.dataset.kind;
-    tabs.forEach(b => b.classList.toggle("active", b === btn));
-    submit.textContent = "Log in as " + kind;
-    staffNote.classList.toggle("hidden", kind !== "staff");
-    NW.show(error, "");
-  }));
 
   document.getElementById("login-form").addEventListener("submit", async e => {
     e.preventDefault();
@@ -68,7 +47,6 @@
         body: {
           email: document.getElementById("email").value.trim(),
           password: document.getElementById("password").value,
-          kind,
         },
       });
       NW.save(data);   // {token, name, role, block_id}

@@ -21,6 +21,8 @@ class Student(Base):
     name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(120), unique=True)
     password_hash: Mapped[str] = mapped_column(String(100))
+    id_no: Mapped[str] = mapped_column(String(20), unique=True)    # university ID, e.g. 2023A7PS0123U (on the card's barcode)
+    card_uid: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)  # chip number from a tap reader, linked by a warden
     block_id: Mapped[int] = mapped_column(ForeignKey("blocks.id"))
     room: Mapped[str] = mapped_column(String(10))
     parent_email: Mapped[str] = mapped_column(String(120))
@@ -62,12 +64,30 @@ class Attendance(Base):
     night: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(10))     # present / absent
     late: Mapped[bool] = mapped_column(Boolean, default=False)
-    method: Mapped[str] = mapped_column(String(10))     # self / manual
+    method: Mapped[str] = mapped_column(String(10))     # self (phone) / id_card (reception) / manual (taker)
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
     marked_by: Mapped[int | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
     marked_at: Mapped[datetime] = mapped_column(DateTime)
     client_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     student: Mapped[Student] = relationship()
+
+
+class AuditLog(Base):
+    """Change history. Rows are only ever added, never edited or deleted, so a warden
+    can see who changed an attendance entry, when, and what it was before."""
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime)                 # campus time
+    actor: Mapped[str] = mapped_column(String(120))                # "Aarav (student)", "Ms Rao (taker)", "parent"
+    action: Mapped[str] = mapped_column(String(30))                # checkin / checkin_refused / manual_mark / pass_decision / flag_email
+    block_id: Mapped[int | None] = mapped_column(ForeignKey("blocks.id"), nullable=True)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id"), nullable=True)
+    night: Mapped[date | None] = mapped_column(Date, nullable=True)
+    before: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    after: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    detail: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    student: Mapped[Student | None] = relationship()
 
 
 class Outbox(Base):

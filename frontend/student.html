@@ -80,8 +80,13 @@
     document.getElementById("who").textContent = `${me.name} · ${me.block} · Room ${me.room}`;
 
     const t = me.tonight;
-    const start = NW.hhmm(t.window_start), end = NW.hhmm(t.window_end);
-    const opensLater = new Date(me.now).getTime() < new Date(t.window_start).getTime();   // server time, not the phone's
+    // Tonight's windows, e.g. 22:00–22:15 (early sleepers) and 23:30–00:00. Check in once, in either.
+    const wins = t.windows.map(([s, e]) => ({ s: new Date(s).getTime(), e: new Date(e).getTime(), opens: NW.hhmm(s), text: `${NW.hhmm(s)}–${NW.hhmm(e)}` }));
+    const times = wins.map(w => w.text).join(" or ");
+    const end = NW.hhmm(t.window_end);
+    const nowMs = new Date(me.now).getTime();   // server time, not the phone's
+    const openNow = wins.some(w => w.s <= nowMs && nowMs < w.e);
+    const next = wins.find(w => nowMs < w.s);   // next window still to come tonight
     let canScan = true;
 
     if (t.status === "present") {
@@ -93,12 +98,12 @@
     } else if (t.status === "absent") {
       statusEl.innerHTML = '<span class="pill bad">Marked absent</span>';
       statusNote.textContent = "If you're back in the hostel now, scan the QR. You'll be marked present (late).";
-    } else if (opensLater) {
+    } else if (!openNow && next) {
       statusEl.innerHTML = '<span class="pill info">Not open yet</span>';
-      statusNote.textContent = `Check-in opens at ${start}. On time until ${end}.`;
+      statusNote.textContent = `Check-in opens at ${next.opens}. Check in once tonight, at ${times}.`;
     } else {
       statusEl.innerHTML = '<span class="pill warn">Not checked in</span>';
-      statusNote.textContent = `Check-in window ${start}–${end}. After ${end} you can still check in, but it's marked late.`;
+      statusNote.textContent = `Check in once tonight, at ${times}. After ${end} you can still check in, but it's marked late.`;
     }
     scanBtn.classList.toggle("hidden", !canScan);
     scanHelp.classList.toggle("hidden", !canScan);

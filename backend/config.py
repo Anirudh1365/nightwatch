@@ -8,6 +8,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nightwatch.db")
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 TZ = ZoneInfo(os.getenv("CAMPUS_TZ", "Asia/Dubai"))
 
+# Early check-in for students who sleep early, before each block's main window (23:30-00:00).
+# A student checks in once a night, in either window. Between the two, check-in is closed.
+# Set EARLY_WINDOW="" to turn it off.
+EARLY_WINDOW = os.getenv("EARLY_WINDOW", "22:00-22:15")
+
 QR_SLOT_SECONDS = int(os.getenv("QR_SLOT_SECONDS", "15"))   # QR changes this often
 # Demo clock: shift the server's idea of "now" so a daytime demo can happen "at 23:45".
 # Set by `python run_demo.py --pretend 23:45`. 0 = real time.

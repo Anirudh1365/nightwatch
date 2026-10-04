@@ -37,11 +37,14 @@ db.add_all([
 
 boys = ["Aarav", "Vivaan", "Ishaan", "Kabir", "Reyansh", "Arjun", "Dhruv", "Vihaan", "Rohan", "Karan"]
 girls = ["Ananya", "Diya", "Saanvi", "Myra", "Aadhya", "Kiara", "Riya", "Meera", "Tara", "Nisha"]
+# Demo university ID numbers in the BITS Dubai format: boys 2023A7PS0001U-0010U, girls 0011U-0020U.
 for i, n in enumerate(boys):
     db.add(Student(name=n, email=f"{n.lower()}@demo.edu", password_hash=pw, block_id=a.id,
+                   id_no=f"2023A7PS{i + 1:04d}U",
                    room=f"A{101 + i // 2}", parent_email=f"parent.{n.lower()}@demo.edu"))
 for i, n in enumerate(girls):
     db.add(Student(name=n, email=f"{n.lower()}@demo.edu", password_hash=pw, block_id=g.id,
+                   id_no=f"2023A7PS{i + 11:04d}U",
                    room=f"G{101 + i // 2}", parent_email=f"parent.{n.lower()}@demo.edu"))
 db.commit()
 print("Seeded: 2 blocks, 7 staff, 20 students. Password for everyone: demo123")

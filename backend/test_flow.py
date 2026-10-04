@@ -37,6 +37,15 @@ assert c.get("/api/blocks/1/night", headers=aarav).status_code == 403
 assert c.get("/api/blocks/1/night", headers=wardenG).status_code == 403
 ok("no login -> 401, student and other-block warden blocked")
 
+# --- one login page: no student/staff choice, the account decides the role
+for email, role in (("aarav@demo.edu", "student"), ("warden.a@demo.edu", "warden"),
+                    ("taker.a@demo.edu", "taker"), ("chief@demo.edu", "chief")):
+    r = c.post("/api/login", json={"email": email, "password": "demo123"})
+    assert r.status_code == 200 and r.json()["role"] == role, r.text
+assert c.post("/api/login", json={"email": "aarav@demo.edu", "password": "wrong"}).status_code == 401
+assert c.post("/api/login", json={"email": "nobody@demo.edu", "password": "demo123"}).status_code == 401
+ok("single login: student lands as student, staff as their role, wrong password refused")
+
 # --- gate pass: Kabir, for today
 fake_now["t"] = at(0, 14, 0)
 r = c.post("/api/passes", json={"pass_date": str(at(0, 0, 0).date()), "reason": "Family dinner"}, headers=kabir)
@@ -54,9 +63,18 @@ ok("warden approves, guard now sees today's pass")
 
 # --- QR + check-in window
 qr = c.get("/api/blocks/1/qr", headers=guard).json()["token"]
-fake_now["t"] = at(0, 22, 0)
-assert "opens" in c.post("/api/checkin", json={"qr_token": qr}, headers=aarav).json()["detail"]
-ok("check-in before 23:30 rejected")
+fake_now["t"] = at(0, 21, 50)
+assert "opens at 22:00" in c.post("/api/checkin", json={"qr_token": qr}, headers=aarav).json()["detail"]
+ok("check-in before 22:00 rejected")
+fake_now["t"] = at(0, 22, 30)
+assert "opens at 23:30" in c.post("/api/checkin", json={"qr_token": qr}, headers=aarav).json()["detail"]
+ok("check-in between the two windows (22:15-23:30) rejected")
+blockA = main.SessionLocal().get(Block, 1)
+for (h, m), want in (((22, 0), "on_time"), ((22, 14), "on_time"), ((22, 15), "between"),
+                     ((23, 29), "between"), ((23, 30), "on_time"), ((0, 1), "late")):
+    got = nt.classify(blockA, at(1 if h < 12 else 0, h, m))[1]
+    assert got == want, (h, m, got)
+ok("two windows: 22:00-22:15 and 23:30-00:00 on time, gap closed, after 00:00 late")
 assert c.post("/api/checkin", json={"qr_token": "1.1.bad"}, headers=aarav).status_code == 400
 assert c.post("/api/checkin", json={"qr_token": nt.qr_token(2)[0]}, headers=aarav).status_code == 400
 ok("fake QR and other block's QR rejected")
@@ -114,6 +132,76 @@ assert [f["name"] for f in flagged] == ["Reyansh"], flagged
 ok("3 absences in 14 nights -> flagged + email queued")
 
 print("\nreport:", c.get("/api/reports/nightly", headers=warden).json())
+
+# --- register, change history, downloads
+tonight = str(nt.night_of(at(0, 23, 0)))
+reg = {r["name"]: r for r in c.get(f"/api/blocks/1/register?night={tonight}", headers=warden).json()["rows"]}
+assert reg["Kabir"]["status"] == "gate_pass" and not reg["Kabir"]["exception"]
+assert reg["Vivaan"]["status"] == "late" and reg["Vivaan"]["exception"]           # came at 00:25
+assert reg["Ishaan"]["exception"] and reg["Ishaan"]["marked_by"]                  # manual, by the taker
+ok("register: every student, exceptions marked, manual marks show who")
+hist = c.get(f"/api/blocks/1/audit?night={tonight}", headers=warden).json()
+acts = [(h["student"], h["action"]) for h in hist]
+assert ("Aarav", "checkin_refused") in acts                      # refusals are kept, not just printed
+aarav_empty = next(h for h in hist if h["student"] == "Aarav" and h["action"] == "manual_mark")
+assert aarav_empty["before"].startswith("present, self") and "spot_check_room_empty" in aarav_empty["after"]
+reyansh = [h for h in hist if h["student"] == "Reyansh" and h["action"] in ("manual_mark", "checkin")]
+assert [h["after"].split(",")[0] for h in reversed(reyansh)] == ["absent", "present (late)"]
+assert any(h["action"] == "pass_decision" and h["actor"] == "parent (email link)" for h in hist)
+ok("change history: refusals, before/after of every change, who made it")
+assert c.get("/api/blocks/1/audit", headers=taker).status_code == 403
+assert c.get("/api/blocks/1/audit", headers=wardenG).status_code == 403
+ok("change history: warden of this block and chief only")
+for url in (f"/api/blocks/1/register.csv?night={tonight}", "/api/blocks/1/audit.csv",
+            "/api/reports/nightly.csv"):
+    r = c.get(url, headers=warden)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv"), url
+    assert "attachment" in r.headers["content-disposition"]
+csv_text = c.get(f"/api/blocks/1/register.csv?night={tonight}", headers=warden).text
+assert "Aarav" in csv_text and ",'," not in csv_text          # empty cells stay empty
+assert main.csv_response("x.csv", ["a"], [["=SUM(A1)"]]).body.decode().splitlines()[1] == "'=SUM(A1)"
+assert c.get("/api/blocks/1/register.csv", headers=aarav).status_code == 403
+ok("CSV downloads work for the warden, not for students")
+
+# --- ID card at the reception desk (barcode via camera, or chip via a USB tap reader)
+fake_now["t"] = at(1, 1, 40)
+scan = lambda code, who=guard, bid=1: c.post(f"/api/blocks/{bid}/scan", json={"code": code}, headers=who)
+r = scan("2023A7PS0006U").json()
+assert r["result"] == "late" and r["student"]["name"] == "Arjun", r
+assert scan("2023A7PS0006U").json()["result"] == "already"
+ok("guard scans Arjun's ID barcode at 01:40 -> present (late); second scan changes nothing")
+assert scan(" 2023a7ps0008u\n").json()["student"]["name"] == "Vihaan"
+ok("scanner input is cleaned up (spaces, lower case, Enter)")
+r = scan("2023A7PS0011U").json()
+assert r["result"] == "refused" and "Block G" in r["message"], r
+ok("a Block G card scanned at Block A is refused")
+r = scan("04A1B2C3").json()
+assert r["result"] == "unknown", r
+link = lambda who, sid=7, code="04 a1 b2 c3": c.post("/api/blocks/1/link-card",
+                                                     json={"code": code, "student_id": sid}, headers=who)
+assert link(guard).status_code == 403 and link(taker).status_code == 403
+assert link(warden).status_code == 200
+assert link(warden, sid=9).status_code == 400              # one card, one student
+assert scan("04A1B2C3").json()["student"]["name"] == "Dhruv"
+ok("unknown chip number: only the warden can link it, then the tap checks Dhruv in")
+assert c.post("/api/blocks/1/scan", json={"code": "2023A7PS0009U"}, headers=aarav).status_code == 403
+assert scan("2023A7PS0009U", who=taker).status_code == 403
+assert scan("2023A7PS0011U", who=guard, bid=2).status_code == 403
+ok("students, takers and other blocks' guards can't use the scan desk")
+fake_now["t"] = at(1, 14, 0)
+r = scan("2023A7PS0010U").json()
+assert r["result"] == "refused" and "closed" in r["message"], r
+ok("ID scan outside check-in hours refused")
+fake_now["t"] = at(1, 1, 45)
+reg = {r["name"]: r for r in c.get(f"/api/blocks/1/register?night={tonight}", headers=warden).json()["rows"]}
+assert reg["Arjun"]["method"] == "id_card" and reg["Arjun"]["marked_by"] == "Guard A"
+hist = c.get(f"/api/blocks/1/audit?night={tonight}", headers=warden).json()
+assert any(h["action"] == "id_scan" and h["student"] == "Arjun" and h["actor"] == "Guard A (guard)" for h in hist)
+assert any(h["action"] == "id_scan_unknown" for h in hist)
+ok("ID scans show in the register and the change history, with the guard's name")
+ov = c.get("/api/blocks/1/night", headers=taker).json()
+assert "Arjun" not in [v["name"] for v in ov["to_visit"] if v["why"] == "not_marked"]
+ok("ID-card check-ins count as checked in for the taker's rounds")
 
 # --- network check
 campus = ["10.30.0.0/16"]

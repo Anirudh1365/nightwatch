@@ -6,7 +6,7 @@ import random
 import time
 from datetime import datetime, date, timedelta
 
-from config import TZ, SECRET_KEY, QR_SLOT_SECONDS, CAMPUS_NETWORKS, CLOCK_OFFSET_SECONDS
+from config import TZ, SECRET_KEY, QR_SLOT_SECONDS, CAMPUS_NETWORKS, CLOCK_OFFSET_SECONDS, EARLY_WINDOW
 from models import Block
 
 
@@ -33,13 +33,34 @@ def window(block: Block, night: date) -> tuple[datetime, datetime]:
     return start, end
 
 
+def windows(block: Block, night: date) -> list[tuple[datetime, datetime]]:
+    """All check-in windows for the night, in order: the early one (if set), then the block's main one."""
+    wins = []
+    if EARLY_WINDOW:
+        s, e = EARLY_WINDOW.split("-")
+        start, end = _at(night, s.strip()), _at(night, e.strip())
+        if end <= start:
+            end += timedelta(days=1)
+        wins.append((start, end))
+    wins.append(window(block, night))
+    return wins
+
+
 def classify(block: Block, moment: datetime) -> tuple[date, str]:
-    """Returns (night, 'too_early' | 'on_time' | 'late')."""
+    """Returns (night, 'too_early' | 'on_time' | 'between' | 'late').
+    'between' = after the early window closed, before the main one opens."""
     night = night_of(moment)
-    start, end = window(block, night)
-    if moment < start:
-        return night, "too_early"
-    return night, "on_time" if moment < end else "late"
+    wins = windows(block, night)
+    if moment >= wins[-1][1]:
+        return night, "late"
+    if any(s <= moment < e for s, e in wins):
+        return night, "on_time"
+    return night, "too_early" if moment < wins[0][0] else "between"
+
+
+def next_opening(block: Block, moment: datetime) -> datetime | None:
+    """Start of the next check-in window after this moment, if any tonight."""
+    return next((s for s, _ in windows(block, night_of(moment)) if moment < s), None)
 
 
 # ---------- rotating QR shown on the reception screen ----------

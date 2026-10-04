@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightWatch ID Desk</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .result { text-align: center; padding: 28px 16px; border-radius: 12px; border: 2px solid var(--line); }
+    .result .big { font-size: 2rem; font-weight: 700; color: var(--navy); line-height: 1.2; }
+    .result .sub { margin-top: 6px; color: var(--muted); }
+    .result .what { margin-top: 12px; font-size: 1.15rem; font-weight: 600; }
+    .result.ok   { border-color: var(--ok);   background: var(--ok-bg); }
+    .result.warn { border-color: var(--warn); background: var(--warn-bg); }
+    .result.bad  { border-color: var(--bad);  background: var(--bad-bg); }
+    .result.ok .what { color: var(--ok); } .result.warn .what { color: var(--warn); } .result.bad .what { color: var(--bad); }
+    #code { font-size: 1.1rem; letter-spacing: 0.04em; }
+    #reader { margin-top: 12px; }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="brand">Night<span>Watch</span></div>
+      <div class="muted" id="who">&nbsp;</div>
+    </div>
+    <div class="row">
+      <select id="block"></select>
+      <button class="btn secondary small" onclick="NW.logout()">Log out</button>
+    </div>
+  </div>
+
+  <div id="msg" class="msg hidden"></div>
+
+  <section class="card">
+    <h2 id="title">ID card check-in</h2>
+    <div class="result" id="result">
+      <div class="big">Scan or tap an ID card</div>
+      <div class="sub">Barcode with the camera, or tap the card on the reader</div>
+    </div>
+
+    <form id="scan-form" style="margin-top:16px">
+      <label for="code">Card number</label>
+      <div class="row" style="flex-wrap:nowrap">
+        <input id="code" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               placeholder="Tap reader types here, or type the ID" style="flex:1;min-width:0;width:auto;margin:0">
+        <button class="btn small" type="submit" style="white-space:nowrap">Check in</button>
+      </div>
+    </form>
+    <div class="row" style="margin-top:12px">
+      <button class="btn secondary small" id="camera-btn">Scan barcode with camera</button>
+      <button class="btn secondary small hidden" id="camera-stop">Stop camera</button>
+    </div>
+    <div id="reader" class="hidden"></div>
+  </section>
+
+  <!-- Unknown card: the warden says whose it is (guards can't) -->
+  <section class="card hidden" id="link-card">
+    <h2>Link this card</h2>
+    <p class="muted" id="link-text"></p>
+    <div id="link-form">
+      <select id="link-student"></select>
+      <button class="btn" id="link-btn">Link card to this student</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Recent scans</h2>
+    <ul class="list" id="recent"><li class="muted">None yet.</li></ul>
+  </section>
+</main>
+
+<script src="vendor/html5-qrcode.min.js"></script>
+<script src="api.js"></script>
+<script>
+  const session = NW.requireLogin(["guard", "warden", "chief"]);
+  const canLink = session.role !== "guard";
+  document.getElementById("who").textContent = session.name;
+  const msg = document.getElementById("msg");
+  const input = document.getElementById("code");
+  const resultBox = document.getElementById("result");
+  let blockId = null, unknownCode = null, resetTimer = null, busy = false;
+  const recent = [];
+
+  const LOOK = {
+    present: ["ok", "Present"], late: ["warn", "Present (late)"], already: ["ok", "Already checked in"],
+    refused: ["bad", "Not checked in"], unknown: ["bad", "Card not recognised"],
+  };
+
+  function showResult(r) {
+    const [kind, what] = LOOK[r.result];
+    const s = r.student;
+    resultBox.className = "result " + kind;
+    resultBox.innerHTML = `
+      <div class="big">${s ? NW.esc(s.name) : "Unknown card"}</div>
+      <div class="sub">${s ? `${NW.esc(s.block)} · Room ${NW.esc(s.room)} · ${NW.esc(s.id_no)}` : NW.esc(r.code)}</div>
+      <div class="what">${what}</div>
+      ${r.result === "refused" || r.result === "unknown" ? `<div class="sub">${NW.esc(r.message)}</div>` : ""}`;
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(idle, 6000);   // ready for the next student
+  }
+
+  function idle() {
+    resultBox.className = "result";
+    resultBox.innerHTML = '<div class="big">Scan or tap an ID card</div><div class="sub">Barcode with the camera, or tap the card on the reader</div>';
+  }
+
+  async function submit(code) {
+    code = code.trim();
+    if (!code || busy) return;
+    busy = true;
+    NW.show(msg, "");
+    try {
+      const r = await NW.api(`/api/blocks/${blockId}/scan`, { method: "POST", body: { code } });
+      showResult(r);
+      recent.unshift({ at: r.at, r });          // server's time, so it matches the register
+      recent.length = Math.min(recent.length, 10);
+      drawRecent();
+      if (r.result === "unknown") offerLink(r.code); else hideLink();
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    busy = false;
+    input.value = "";
+    input.focus();
+  }
+
+  function drawRecent() {
+    document.getElementById("recent").innerHTML = recent.map(({ at, r }) => {
+      const [kind, what] = LOOK[r.result];
+      return `<li><div><strong>${r.student ? NW.esc(r.student.name) : "Unknown card"}</strong>
+        <span class="muted"> · ${at}${r.student ? " · Room " + NW.esc(r.student.room) : ""}</span></div>
+        <span class="pill ${kind}">${what}</span></li>`;
+    }).join("");
+  }
+
+  // ---------- typed / USB tap reader / USB barcode gun ----------
+  // Those readers type the number and press Enter, so a normal form submit catches them.
+  document.getElementById("scan-form").addEventListener("submit", e => {
+    e.preventDefault();
+    submit(input.value);
+  });
+  // Keep the box focused so a tap always lands in it (unless someone is picking a student to link).
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#link-card, select, input, button, a")) input.focus();
+  });
+
+  // ---------- unknown card -> warden links it ----------
+  async function offerLink(code) {
+    unknownCode = code;
+    const box = document.getElementById("link-card");
+    box.classList.remove("hidden");
+    if (!canLink) {
+      document.getElementById("link-text").textContent =
+        `Card ${code} isn't linked to anyone yet. Ask the warden to link it, or check the student in with their phone.`;
+      document.getElementById("link-form").classList.add("hidden");
+      return;
+    }
+    document.getElementById("link-text").textContent =
+      `Card ${code} isn't linked to anyone yet. Pick the student holding it (check their face against the card).`;
+    const { rows } = await NW.api(`/api/blocks/${blockId}/register`);
+    document.getElementById("link-student").innerHTML = rows.map(s =>
+      `<option value="${s.student_id}">${NW.esc(s.room)} · ${NW.esc(s.name)} · ${NW.esc(s.id_no)}</option>`).join("");
+  }
+  function hideLink() { document.getElementById("link-card").classList.add("hidden"); }
+
+  document.getElementById("link-btn").addEventListener("click", async e => {
+    e.target.disabled = true;
+    try {
+      const r = await NW.api(`/api/blocks/${blockId}/link-card`, {
+        method: "POST",
+        body: { code: unknownCode, student_id: Number(document.getElementById("link-student").value) },
+      });
+      hideLink();
+      await submit(unknownCode);        // check them in straight away
+      NW.show(msg, r.message.replace(" Scan it again to check in.", ""), "ok");
+    } catch (err) {
+      NW.show(msg, err.message);
+    }
+    e.target.disabled = false;
+  });
+
+  // ---------- camera barcode ----------
+  let scanner = null, lastCode = "", lastAt = 0;
+  const camBtn = document.getElementById("camera-btn"), camStop = document.getElementById("camera-stop");
+  const reader = document.getElementById("reader");
+
+  async function stopCamera() {
+    if (scanner) { try { await scanner.stop(); } catch {} scanner = null; }
+    reader.classList.add("hidden");
+    camStop.classList.add("hidden");
+    camBtn.disabled = false;
+  }
+
+  camBtn.addEventListener("click", async () => {
+    NW.show(msg, "");
+    if (!window.isSecureContext) {
+      NW.show(msg, "The camera only works on a secure (https://) page. Use the https link, or the tap reader / typing instead.");
+      return;
+    }
+    if (typeof Html5Qrcode === "undefined") {
+      NW.show(msg, "The barcode scanner didn't load. Reload the page.");
+      return;
+    }
+    camBtn.disabled = true;
+    reader.classList.remove("hidden");
+    camStop.classList.remove("hidden");
+    const F = Html5QrcodeSupportedFormats;
+    scanner = new Html5Qrcode("reader", {
+      verbose: false,
+      formatsToSupport: [F.CODE_128, F.CODE_39, F.CODE_93, F.CODABAR, F.ITF, F.EAN_13, F.QR_CODE],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    });
+    try {
+      // A wide, short box: ID card barcodes are long stripes, not squares.
+      const box = (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(Math.min(h * 0.45, 160)) });
+      await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: box }, code => {
+        // The camera sees the same card many times a second; only send it once.
+        if (code === lastCode && Date.now() - lastAt < 4000) return;
+        lastCode = code; lastAt = Date.now();
+        submit(code);
+      }, () => {});
+    } catch {
+      await stopCamera();
+      NW.show(msg, "Couldn't open the camera. Allow camera access for this site and try again.");
+    }
+  });
+  camStop.addEventListener("click", stopCamera);
+
+  // ---------- block ----------
+  function setBlock(id, name) {
+    blockId = id;
+    hideLink();
+    input.focus();
+  }
+  NW.blockPicker(document.getElementById("block"), id => setBlock(id))
+    .then(id => setBlock(id))
+    .catch(err => NW.show(msg, err.message));
+</script>
+</body>
+</html>

@@ -24,6 +24,12 @@
   </section>
 
   <section class="card">
+    <h2>ID card check-in</h2>
+    <p class="muted">For students checking in with their university ID card: scan the barcode with this device's camera, or tap the card on a USB card reader.</p>
+    <a class="btn" id="scan-link" href="scan.html">Open ID desk</a>
+  </section>
+
+  <section class="card">
     <div class="row" style="justify-content:space-between">
       <h2 style="margin:0">Approved gate passes today</h2>
       <button class="btn secondary small" id="refresh">Refresh</button>
@@ -38,6 +44,7 @@
   const session = NW.requireLogin(["guard"]);
   document.getElementById("who").textContent = session.name;
   document.getElementById("reception-link").href = "reception.html?block=" + session.block_id;
+  document.getElementById("scan-link").href = "scan.html?block=" + session.block_id;
 
   async function loadPasses() {
     const list = document.getElementById("passes");

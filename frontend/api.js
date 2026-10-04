@@ -59,6 +59,31 @@ const NW = {
     return data;
   },
 
+  // Download a file (the CSV reports). A plain link can't send the login token,
+  // so fetch it with the token and hand the browser the result.
+  async download(path) {
+    const s = NW.session();
+    let res;
+    try {
+      res = await fetch(path, { headers: s ? { Authorization: "Bearer " + s.token } : {} });
+    } catch {
+      throw new Error("Can't reach the server. Check your connection.");
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error((data && data.detail) || "Download failed (" + res.status + ")");
+    }
+    const name = (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name ? name[1] : "nightwatch.csv";
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
   // Fill a <select> with the blocks this staff member can open and return the chosen id.
   // Only the chief warden has more than one, so everyone else never sees the dropdown.
   // The choice is kept in the URL (?block=2) so links and reloads keep it.
@@ -85,9 +110,10 @@ const NW = {
   // "2026-09-29T23:30:00+04:00" -> "23:30" (campus time, whatever the phone's timezone is)
   hhmm(iso) { return String(iso).slice(11, 16); },
   // "2026-09-29" -> "Tue 29 Sep"
+  // "2026-09-30" -> "30/09/26" (DD/MM/YY everywhere)
   niceDate(d) {
-    const [y, m, day] = String(d).split("-").map(Number);
-    return new Date(y, m - 1, day).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    const [y, m, day] = String(d).split("-");
+    return `${day}/${m}/${y.slice(2)}`;
   },
   // Show a message in a .msg element. kind: error / ok / info. Empty text hides it.
   show(el, text, kind = "error") {
@@ -96,3 +122,18 @@ const NW = {
     el.classList.toggle("hidden", !text);
   },
 };
+
+// Home icon at the top left of every page with a top bar. It goes to *your* dashboard,
+// so a warden who opened Rounds (the taker page) can get back to the warden page.
+(function addHomeButton() {
+  const bar = document.querySelector(".topbar");
+  const s = NW.session();
+  if (!bar || !s) return;
+  const a = document.createElement("a");
+  a.className = "home-btn";
+  a.href = NW.homeFor(s.role);
+  a.title = "Home";
+  a.setAttribute("aria-label", "Home");
+  a.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>';
+  bar.prepend(a);
+})();

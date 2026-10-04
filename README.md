@@ -1,6 +1,6 @@
-# NightWatch - Hostel Night Attendance (CampusOPS PS03)
+# NightWatch - Hostel Night Attendance (CampusOPS Problem Statement 04: Night Attendance Scanning)
 
-Students check in on their phone between 23:30 and 00:00 by scanning a QR on the
+Students check in on their phone at 22:00-22:15 or 23:30-00:00 by scanning a QR on the
 reception screen while connected to the campus Wi-Fi. The attendance taker only
 visits rooms that didn't check in, plus a few random spot checks. Gate passes are
 approved by the parent (email link) and the warden, and excuse the student for that day.
@@ -48,8 +48,8 @@ Phone browsers only allow the camera on HTTPS. One command sets that up:
 cd backend
 python run_demo.py --pretend 23:35 --reset   # fresh demo data + server acts as if it's 23:35
 ```
-`--pretend` matters: check-in only opens at 23:30, so a daytime demo without it gets
-"Check-in opens at 23:30" (or everyone marked late before noon). `--reset` reloads the demo
+`--pretend` matters: check-in is only open 22:00-22:15 and 23:30-00:00, so a daytime demo
+without it gets "Check-in is closed now" (or everyone marked late before noon). `--reset` reloads the demo
 data (`seed.py --history`) using the same pretend clock. The pretend clock keeps ticking, so
 23:35 gives about 25 minutes of on-time check-ins; restart without `--reset` to reset the clock
 and keep the data. Plain `python run_demo.py` uses real time.
@@ -75,6 +75,8 @@ Every check-in attempt prints a `[check-in]` line in the terminal with the reaso
 |---|---|---|
 | All | POST /api/login | returns a signed token (send as `Authorization: Bearer ...`) |
 | Student | POST /api/checkin | QR token + Wi-Fi check + time window |
+| Guard / warden | POST /api/blocks/{id}/scan | ID card check-in at reception (barcode or chip number), same time rules |
+| Warden | POST /api/blocks/{id}/link-card | link an unknown card's chip number to a student |
 | Student | POST /api/passes, GET /api/passes/mine | request a one-day gate pass |
 | Parent | GET/POST /api/parent/{token} | one-time approve/reject link from email |
 | Warden | GET /api/blocks/{id}/passes, POST /api/passes/{id}/decide | approve passes |
@@ -85,11 +87,16 @@ Every check-in attempt prints a `[check-in]` line in the terminal with the reaso
 | Warden | GET /api/blocks/{id}/alerts | absent tonight with no pass |
 | Warden | POST /api/flags/run | 3 absences or 5 manual marks in 14 nights -> email |
 | Warden | GET /api/reports/nightly | per-night present / late / absent counts |
+| Warden | GET /api/blocks/{id}/register | every student tonight, exceptions marked |
+| Warden | GET /api/blocks/{id}/audit | change history: who changed what, before -> after |
+| Warden | GET .../register.csv, .../audit.csv, /api/reports/nightly.csv | CSV downloads |
 
 Emails go to the `outbox` table and are printed in the terminal (swap for SMTP/Mailtrap later).
 
 ## Rules built in
-- Check-in window per block (default 23:30-00:00). After 00:00 it still works but is marked late.
+- Two check-in windows: 22:00-22:15 for early sleepers (`EARLY_WINDOW` in config.py) and the block's
+  main window (default 23:30-00:00). Check in once, in either; 22:15-23:30 is closed. After 00:00
+  it still works but is marked late.
   A night runs noon to noon, so 00:40 counts for the previous night.
 - QR is valid for its 15 s slot plus the previous one; old screenshots fail.
 - Approved gate pass for that date = excused. If they return and check in, they're present.
@@ -101,15 +108,16 @@ Emails go to the `outbox` table and are printed in the terminal (swap for SMTP/M
 Open http://127.0.0.1:8000 and log in. Each role lands on its own page.
 | Page | Who | What |
 |---|---|---|
-| index.html | everyone | login, Student / Staff tabs |
+| index.html | everyone | one login for everyone; sends each person to their own page |
 | student.html | student | tonight's status, Scan QR, gate pass request, my passes |
 | reception.html | guard / warden | full-screen rotating QR for the reception display |
-| guard.html | guard | today's approved passes, link to the reception screen |
+| guard.html | guard | today's approved passes, links to the reception screen and the ID desk |
+| scan.html | guard / warden | ID desk: scan the card's barcode with the camera, or tap it on a USB card reader (types the number + Enter); warden can link unknown cards |
 | taker.html | taker (warden too) | rooms to visit, Present (with reason) / Absent / spot checks |
-| warden.html | warden / chief | tonight's counts, alerts, passes to approve, 14-night chart, repeat-absence check |
+| warden.html | warden / chief | tonight's counts, alerts, register (exceptions), passes to approve, 14-night table, change history, CSV downloads, repeat-absence check |
 | parent.html | parent (no login) | opened from the email link: Approve / Reject |
 
-For the demo, `python seed.py --history` adds 14 past nights so the chart and the
+For the demo, `python seed.py --history` adds 14 past nights so the 14-night table and the
 repeat-absence check have data (Rohan in Block A gets flagged). Run the tests on a plain
 `python seed.py`, not on history data.
 
