@@ -100,7 +100,8 @@ credential at designated locations." The team is pursuing this statement only.
   1. Pitch doc (`docs/NightWatch_Pitch_and_Demo_Script.docx` + .pdf) rewritten 4 Oct 2026 for PS04:
      Part 1 = 3-minute video script (~396 words), Part 2 pitch, Part 3 demo (ID desk = step 4),
      Part 4 Q&A grouped by the organisers' 4 topics incl. cost table. README has a Cost section.
-     Team still has to fill in: team name, who presents what, and confirm the curfew-pilot wording.
+     Team name: BIT BY BITS (on the cover and in the README). Still to fill in: who presents
+     what, and confirm the curfew-pilot wording.
      Then record the video and put its link in the README.
   2. Test a REAL BITS ID card with the camera (`python run_demo.py`, https link). Its number won't
      be in the demo data: log in as warden, link it at the ID desk, scan again. This also shows
