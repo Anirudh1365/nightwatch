@@ -131,6 +131,20 @@ student in all six blocks checking in within half an hour is light work for one 
 
 For a demo on one laptop, use `python run_demo.py` instead (see "Phone demo" above).
 
+## Cost (rough estimates)
+No licence fees: everything used is open source, and students use their own phones.
+| Item | One-off cost |
+|---|---|
+| Server on the campus network | AED 0 as a VM on IT's existing servers, or about AED 1,500-2,500 for a mini PC |
+| Screen at each of the 6 receptions | AED 0 with an old monitor + PC, or about AED 400-700 each for a basic tablet |
+| ID desk | AED 0 (uses the same camera) |
+| USB tap reader (optional) | about AED 50-250 per desk, once the card's chip type is known |
+| Email | AED 0 (university mail server) |
+
+Total: close to AED 0 if IT reuses equipment, roughly AED 8,000 if everything is bought new.
+Running cost is close to zero. IT needs about 1-2 days to set it up and a few hours each
+semester to load the student list. These are UAE retail estimates (October 2026), not quotes.
+
 ## Main endpoints
 | Who | Endpoint | What |
 |---|---|---|
