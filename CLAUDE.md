@@ -89,8 +89,10 @@ credential at designated locations." The team is pursuing this statement only.
 ## Where we are (end of 2 Oct 2026 session)
 - Done and tested (`test_flow.py`: 30 checks pass; warden page and ID desk checked in a browser
   at phone and desktop sizes): change history, warden register, CSV downloads, ID desk.
-- 4 Oct 2026: everything committed (4352f80), README has Technical overview + Deployment
-  sections (92d574f). No GitHub remote yet. Hackathon deliverables: GitHub repo (code, README,
+- 4 Oct 2026: pushed to PUBLIC repo https://github.com/Anirudh1365/nightwatch (gh account Anirudh1365;
+  push with `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push`).
+- Earlier 4 Oct: everything committed (4352f80), README has Technical overview + Deployment
+  sections (92d574f). Hackathon deliverables: GitHub repo (code, README,
   setup, technical overview, deployment), demo video max 3 min, finalist Q&A (incl. cost).
   Commit under the laptop's existing git identity.
 - No servers running. Database reset with `python seed.py` (clean, no history).

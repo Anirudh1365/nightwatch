@@ -1,9 +1,12 @@
 # NightWatch - Hostel Night Attendance (CampusOPS Problem Statement 04: Night Attendance Scanning)
 
 Students check in on their phone at 22:00-22:15 or 23:30-00:00 by scanning a QR on the
-reception screen while connected to the campus Wi-Fi. The attendance taker only
+reception screen while connected to the campus Wi-Fi, or with their university ID card at the
+reception desk. The attendance taker only
 visits rooms that didn't check in, plus a few random spot checks. Gate passes are
 approved by the parent (email link) and the warden, and excuse the student for that day.
+
+Pitch, video script, demo steps and Q&A: `docs/NightWatch_Pitch_and_Demo_Script.pdf`.
 
 ## Run it
 ```bash
