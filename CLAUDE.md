@@ -89,8 +89,10 @@ credential at designated locations." The team is pursuing this statement only.
 ## Where we are (end of 2 Oct 2026 session)
 - Done and tested (`test_flow.py`: 30 checks pass; warden page and ID desk checked in a browser
   at phone and desktop sizes): change history, warden register, CSV downloads, ID desk.
-- NOTHING IS COMMITTED. The working tree also holds earlier sessions' work (two windows, single
-  login, ERP-style restyle, pitch doc edits). Commit under the laptop's existing git identity.
+- 4 Oct 2026: everything committed (4352f80), README has Technical overview + Deployment
+  sections (92d574f). No GitHub remote yet. Hackathon deliverables: GitHub repo (code, README,
+  setup, technical overview, deployment), demo video max 3 min, finalist Q&A (incl. cost).
+  Commit under the laptop's existing git identity.
 - No servers running. Database reset with `python seed.py` (clean, no history).
 - Still to do:
   1. Pitch doc (`docs/NightWatch_Pitch_and_Demo_Script.docx` + .pdf) still says PS03 and doesn't
