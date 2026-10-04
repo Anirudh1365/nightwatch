@@ -10,7 +10,7 @@ approved by the parent (email link) and the warden, and excuse the student for t
 cd backend
 pip install -r requirements.txt
 python seed.py            # demo data, every password is demo123
-python test_flow.py       # 15 end-to-end checks, should print ALL TESTS PASSED
+python test_flow.py       # 30 end-to-end checks, should print ALL TESTS PASSED
 python seed.py            # reset data after the tests
 uvicorn main:app --reload --host 0.0.0.0
 ```
@@ -69,6 +69,67 @@ to open on phones, and points parent email links at the laptop.
 
 Every check-in attempt prints a `[check-in]` line in the terminal with the reason.
 `python run_demo.py --no-wifi-check` turns the Wi-Fi check off for rehearsals.
+
+## Technical overview
+```
+ phones / reception screen / ID desk / staff laptops   (browser, campus Wi-Fi)
+                     |  HTTPS, JSON
+              FastAPI server (backend/main.py)
+       auth.py: logins, signed tokens, role checks
+       night.py: check-in windows, rotating QR, campus Wi-Fi check, spot checks
+                     |  SQLAlchemy
+          SQLite (demo) or MySQL (production)
+```
+- **Backend:** Python 3.11+, FastAPI, SQLAlchemy. One process serves both the API (`/api/...`)
+  and the pages in `frontend/`. Tables are created on start-up.
+- **Frontend:** plain HTML, CSS and JavaScript, no build step. The QR scanner and QR drawing
+  libraries and the font are stored in `frontend/vendor/`, so nothing loads from the internet.
+- **Logins:** one login page for students and staff. Passwords are stored as bcrypt hashes. After
+  login the browser gets a signed token (itsdangerous) and sends it with every request. Each
+  endpoint checks the role (student, guard, taker, warden, chief) and the block.
+- **Rotating QR:** each reception screen shows a code made from the block number and the current
+  15-second slot, signed with HMAC-SHA256 and the server's secret key. The server accepts the
+  current slot and the one before it, so a screenshot stops working after about 30 seconds.
+- **Campus Wi-Fi check:** the server reads the IP address of the incoming connection and checks it
+  against `CAMPUS_NETWORKS`. The phone sends nothing, so there is nothing for the phone to fake.
+- **ID card desk:** the camera reads the card's barcode, or a USB tap reader types the chip number.
+  Both go through the same check-in rules as the phone.
+- **Data:** `blocks`, `students`, `staff`, `gate_passes`, `attendance` (one row per student per
+  night: status, method, who marked it, reason), `audit_log` (append-only change history) and
+  `outbox` (emails waiting to be sent).
+- **Emails:** written to the `outbox` table and printed in the terminal. Sending them for real
+  needs an SMTP account from the university.
+- **Tests:** `backend/test_flow.py` runs the whole flow (check-ins, refusals, taker rounds, gate
+  passes, alerts, ID desk, change history) against a fresh database.
+
+## Deployment (campus server)
+The server has to sit on the campus network, because the Wi-Fi check needs to see each phone's
+campus IP address. A small Linux VM from IT is enough: each check-in is one short request, so even every
+student in all six blocks checking in within half an hour is light work for one server.
+1. Install Python 3.11+ and MySQL. Create an empty database, e.g. `nightwatch`.
+2. Copy the repo and install: `cd backend && pip install -r requirements.txt`
+3. Set these environment variables (for example in a systemd service file):
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | `mysql+mysqlconnector://USER:PASSWORD@localhost:3306/nightwatch` |
+   | `SECRET_KEY` | a long random string (signs logins and QR codes; never leave the default) |
+   | `CAMPUS_NETWORKS` | campus Wi-Fi ranges from IT, comma-separated (default `10.30.0.0/16`) |
+   | `BASE_URL` | the address people open, e.g. `https://nightwatch.<campus domain>` (used in parent email links) |
+   | `CAMPUS_TZ` | `Asia/Dubai` (default) |
+   | `EARLY_WINDOW`, `SPOT_CHECKS_PER_NIGHT` | optional, see `backend/config.py` |
+4. Load real data: blocks, students (with room and parent email) and staff accounts. `seed.py` shows
+   the format; production data would come as a one-off export from the ERP.
+5. Start the server: `uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2`
+6. Put nginx (or IT's existing web server) in front with a proper HTTPS certificate. Phones need
+   HTTPS for the camera. The proxy must pass the real client IP:
+   `proxy_set_header X-Forwarded-For $remote_addr;`. Uvicorn trusts this header from 127.0.0.1
+   by default; if the proxy is on another machine, add `--forwarded-allow-ips=PROXY_IP`.
+   Without this, every check-in looks like it comes from the proxy.
+7. Put a screen (any old monitor + browser) at each block reception, logged in as that block's
+   guard, showing the reception page. A USB card reader at the desk is optional.
+8. Back up the database every night. The change history lives there.
+
+For a demo on one laptop, use `python run_demo.py` instead (see "Phone demo" above).
 
 ## Main endpoints
 | Who | Endpoint | What |
